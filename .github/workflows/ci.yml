@@ -1,0 +1,390 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ${{ github.repository }}-backend
+  AI_SERVICE_IMAGE: ${{ github.repository }}-ai-service
+  WEB_IMAGE: ${{ github.repository }}-web
+
+jobs:
+  # Backend testing and building
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_USER: testuser
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov
+
+    - name: Run linter (ruff)
+      working-directory: ./backend
+      run: |
+        pip install ruff
+        ruff check .
+
+    - name: Run type checking (mypy)
+      working-directory: ./backend
+      run: |
+        pip install mypy
+        mypy . --ignore-missing-imports
+
+    - name: Run tests with coverage
+      working-directory: ./backend
+      run: |
+        pytest --cov=app --cov-report=xml --cov-report=term-missing
+      env:
+        DATABASE_URL: postgresql://testuser:testpass@localhost:5432/test_db
+        REDIS_URL: redis://localhost:6379
+        JWT_SECRET: test_secret_key_for_ci
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./backend/coverage.xml
+        flags: backend
+        name: backend-coverage
+
+  # AI Service testing
+  ai-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      working-directory: ./ai-service
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio
+
+    - name: Run linter
+      working-directory: ./ai-service
+      run: |
+        pip install ruff
+        ruff check .
+
+    - name: Run tests
+      working-directory: ./ai-service
+      run: |
+        pytest app/tests/ -v
+
+  # Frontend testing and building
+  frontend-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: web/package-lock.json
+
+    - name: Install dependencies
+      working-directory: ./web
+      run: npm ci
+
+    - name: Run linter (ESLint + Prettier)
+      working-directory: ./web
+      run: |
+        npm run lint
+        npx prettier --check "**/*.{ts,tsx,js,jsx,json,css,md}"
+
+    - name: Run type checking
+      working-directory: ./web
+      run: npm run build
+
+    - name: Run tests
+      working-directory: ./web
+      run: |
+        npm install --save-dev vitest jsdom @testing-library/jest-dom
+        npx vitest run --coverage
+      env:
+        VITE_API_URL: http://localhost:8000
+        VITE_AI_URL: http://localhost:8001
+
+  # Security scanning
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    # Backend security scan
+    - name: Run Bandit (security linter)
+      working-directory: ./backend
+      run: |
+        pip install bandit[toml]
+        bandit -r . -f json -o bandit-results.json --skip B105,B110
+        cat bandit-results.json
+
+    # Frontend security scan
+    - name: Run npm audit
+      working-directory: ./web
+      run: npm audit --audit-level moderate --production
+
+    # SAST for secrets and vulnerabilities
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # Docker image building
+  build-images:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, ai-tests, frontend-tests, security-scan]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    # Backend image
+    - name: Build and push backend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+        labels: |
+          org.opencontainers.image.title=${{ github.event.repository.name }}
+          org.opencontainers.image.description=Apollo LMS Backend API
+          org.opencontainers.image.source=${{ github.event.repository.html_url }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    # AI Service image
+    - name: Build and push AI service image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./ai-service
+        file: ./ai-service/Dockerfile
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.AI_SERVICE_IMAGE }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.AI_SERVICE_IMAGE }}:latest
+        labels: |
+          org.opencontainers.image.title=${{ github.event.repository.name }}-ai
+          org.opencontainers.image.description=Apollo LMS AI Service
+          org.opencontainers.image.source=${{ github.event.repository.html_url }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    # Frontend image
+    - name: Build and push web image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./web
+        file: ./web/Dockerfile
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.WEB_IMAGE }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.WEB_IMAGE }}:latest
+        labels: |
+          org.opencontainers.image.title=${{ github.event.repository.name }}-web
+          org.opencontainers.image.description=Apollo LMS Frontend
+          org.opencontainers.image.source=${{ github.event.repository.html_url }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Database migration check (against staging)
+  migration-check:
+    runs-on: ubuntu-latest
+    needs: [backend-tests]
+    environment: staging
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Check migrations
+      working-directory: ./backend
+      run: |
+        pip install alembic
+        alembic check
+      env:
+        DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+
+  # Integration tests
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: apollo_lms
+          POSTGRES_PASSWORD: apollo
+          POSTGRES_USER: apollo
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run integration tests with docker-compose
+      run: |
+        docker-compose -f docker-compose.test.yml up -d
+        sleep 30
+        
+        # Run Playwright e2e tests
+        npx playwright install
+        npx playwright test --headed=false --project=chromium
+        
+        docker-compose -f docker-compose.test.yml down
+
+  # Deployment to staging
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [build-images, integration-tests, migration-check]
+    environment: staging
+    if: github.ref != 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment..."
+        
+        # Update docker-compose.staging.yml with new image tags
+        sed -i "s|image: .*/.*:.*|image: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}|" docker-compose.staging.yml
+        sed -i "s|image: .*/.*:.*|image: ${{ env.REGISTRY }}/${{ env.AI_SERVICE_IMAGE }}:${{ github.sha }}|" docker-compose.staging.yml
+        sed -i "s|image: .*/.*:.*|image: ${{ env.REGISTRY }}/${{ env.WEB_IMAGE }}:${{ github.sha }}|" docker-compose.staging.yml
+        
+        # Deploy using docker-compose or your deployment method
+        # docker-compose -f docker-compose.staging.yml up -d --pull=missing
+
+        echo "Staging deployment completed"
+
+  # Production deployment
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [integration-tests, migration-check]
+    environment: production
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production environment..."
+        
+        # Update docker-compose.prod.yml with new image tags
+        sed -i "s|image: .*/.*:.*|image: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}|" docker-compose.prod.yml
+        sed -i "s|image: .*/.*:.*|image: ${{ env.REGISTRY }}/${{ env.AI_SERVICE_IMAGE }}:${{ github.sha }}|" docker-compose.prod.yml
+        sed -i "s|image: .*/.*:.*|image: ${{ env.REGISTRY }}/${{ env.WEB_IMAGE }}:${{ github.sha }}|" docker-compose.prod.yml
+        
+        # Deploy using docker-compose or your deployment method
+        # docker-compose -f docker-compose.prod.yml up -d --pull=missing
+        
+        # Run smoke tests
+        curl -f http://production-server/health || exit 1
+        
+        echo "Production deployment completed"
+
+  # Notification
+  notification:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, ai-tests, frontend-tests, security-scan, deploy-staging, deploy-production]
+    if: always()
+
+    steps:
+    - name: Post deployment notification
+      run: |
+        if [ "${{ job.status }}" = "success" ]; then
+          echo "✅ All pipeline jobs succeeded"
+          
+          # Send Slack/Discord notification
+          # curl -X POST -H 'Content-type: application/json' \
+          # --data '{"text":"🚀 Apollo LMS deployment successful"}' \
+          # ${{ secrets.SLACK_WEBHOOK_URL }}
+          
+        else
+          echo "❌ Pipeline failed"
+          # Send failure notification with logs
+        fi

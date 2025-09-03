@@ -1,0 +1,130 @@
+version: '3.8'
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: apollo_lms
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: apollo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - lms_network
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - lms_network
+
+  # Backend API (FastAPI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:apollo@postgres/apollo_lms
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AI_SERVICE_URL=http://ai-service:8001
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+    networks:
+      - lms_network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # AI Service (FastAPI with ML models)
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ai-service:/app
+    networks:
+      - lms_network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+  # Frontend (React)
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_AI_URL=http://localhost:8001
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    networks:
+      - lms_network
+    command: npm run dev
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - web
+      - ai-service
+    networks:
+      - lms_network
+
+  # Python worker for background tasks (commented out - missing worker module)
+  # worker:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     - DATABASE_URL=postgresql+asyncpg://lmsadmin:apollo@postgres/apollo_lms
+  #     - REDIS_URL=redis://redis:6379
+  #     - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   volumes:
+  #     - ./backend:/app
+  #   networks:
+  #     - lms_network
+  #   command: celery -A app.worker.celery_app worker --loglevel=info
+
+  # Message queue for background tasks (commented out - worker commented out)
+  # rabbitmq:
+  #   image: rabbitmq:3-management-alpine
+  #   environment:
+  #     RABBITMQ_DEFAULT_USER: admin
+  #     RABBITMQ_DEFAULT_PASS: admin123
+  #   ports:
+  #     - "5672:5672"
+  #     - "15672:15672"
+  #   networks:
+  #     - lms_network
+
+volumes:
+  postgres_data:
+
+networks:
+  lms_network:
+    driver: bridge
