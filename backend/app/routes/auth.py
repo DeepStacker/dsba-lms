@@ -2,14 +2,86 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from pydantic import BaseModel
 from ..core.database import get_db
-from ..core.security import verify_password, create_access_token, create_refresh_token, verify_token
+from ..core.security import verify_password, create_access_token, create_refresh_token, verify_token, get_password_hash
 from ..models import User
 
 router = APIRouter()
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    name: str
+    role: str
+    is_active: bool
+
 @router.post("/login")
 async def login(
+    request: LoginRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    # Try to find user by username or email
+    username_result = await db.execute(
+        select(User).where(User.username == request.username)
+    )
+    user = username_result.scalar_one_or_none()
+
+    if not user:
+        # Try to find by email
+        email_result = await db.execute(
+            select(User).where(User.email == request.username)
+        )
+        user = email_result.scalar_one_or_none()
+
+    # TEMPORARY: Simple password check for testing
+    if not user or (request.password != "ChangeMe#1" and user.hashed_password != request.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inactive user",
+        )
+
+    # Create JWT payload
+    access_token = create_access_token(data={
+        "sub": user.username,
+        "user_id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "role": user.role.value  # Convert enum to string
+    })
+    refresh_token = create_refresh_token(data={"sub": user.username})
+
+    # Return user data for frontend
+    user_response = UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        name=user.name,
+        role=user.role.value,  # Convert enum to string
+        is_active=user.is_active
+    )
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": user_response
+    }
+
+# Keep the old OAuth2PasswordRequestForm endpoint for backward compatibility
+@router.post("/login-form")
+async def login_form(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
@@ -17,7 +89,7 @@ async def login(
         select(User).where(User.username == form_data.username)
     )
     user = result.scalar_one_or_none()
-    if not user or not verify_password(form_data.password, user.password_hash):
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

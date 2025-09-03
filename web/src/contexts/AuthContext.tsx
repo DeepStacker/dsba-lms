@@ -145,9 +145,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem('accessToken', access_token);
       localStorage.setItem('refreshToken', refresh_token);
 
-      // Set state
-      setToken(access_token);
-      setUser(userData);
+      // Set state - if userData is in the response, use it, otherwise fallback to JWT parsing
+      if (userData) {
+        setToken(access_token);
+        setUser({
+          id: userData.id,
+          username: userData.username,
+          email: userData.email,
+          name: userData.name,
+          role: userData.role,
+          phone: userData.phone,
+          is_active: userData.is_active,
+          mfa_enabled: userData.mfa_enabled,
+          last_login: userData.last_login ? new Date(userData.last_login) : undefined,
+          department: userData.department,
+          first_login: userData.first_login,
+        });
+      } else {
+        // Fallback to JWT parsing if user data not in response
+        const decoded: any = jwtDecode(access_token);
+        setToken(access_token);
+        setUser({
+          id: decoded.user_id || decoded.sub,
+          username: decoded.username,
+          email: decoded.email,
+          name: decoded.name,
+          role: decoded.role,
+          phone: decoded.phone,
+          is_active: decoded.is_active,
+          mfa_enabled: decoded.mfa_enabled,
+          last_login: decoded.last_login ? new Date(decoded.last_login) : undefined,
+          department: decoded.department,
+          first_login: decoded.first_login,
+        });
+      }
 
       toast.success('Login successful!');
 

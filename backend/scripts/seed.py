@@ -56,16 +56,12 @@ CO_PO_MAPPING = [
 ]
 
 USER_DATA = [
-    {"username": "admin.hod", "email": "admin@college.edu", "name": "Dr. Admin", "role": "admin",
-     "phone": "+1234567890", "hashed_password": pwd_context.hash("admin123")},
-    {"username": "teacher.cs", "email": "teacher.cs@college.edu", "name": "Prof. John Smith", "role": "teacher",
-     "phone": "+1234567891", "hashed_password": pwd_context.hash("teacher123")},
-    {"username": "student.1", "email": "student1@college.edu", "name": "Alice Johnson", "role": "student",
-     "phone": "+1234567892", "hashed_password": pwd_context.hash("student123")},
-    {"username": "student.2", "email": "student2@college.edu", "name": "Bob Wilson", "role": "student",
-     "phone": "+1234567893", "hashed_password": pwd_context.hash("student123")},
-    {"username": "student.3", "email": "student3@college.edu", "name": "Charlie Brown", "role": "student",
-     "phone": "+1234567894", "hashed_password": pwd_context.hash("student123")},
+    {"username": "hod", "email": "hod@lms.edu", "name": "HOD Admin", "role": "admin",
+     "phone": "+1234567890", "password_hash": pwd_context.hash("ChangeMe#1")},
+    {"username": "teacher", "email": "teacher@lms.edu", "name": "Teacher User", "role": "teacher",
+     "password_hash": pwd_context.hash("ChangeMe#1")},
+    {"username": "student", "email": "student@lms.edu", "name": "Student User", "role": "student",
+     "password_hash": pwd_context.hash("ChangeMe#1")},
 ]
 
 CLASS_SECTIONS_DATA = [
