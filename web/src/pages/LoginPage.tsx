@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
@@ -6,6 +7,7 @@ import { Card } from '../components/common/Card';
 import toast from 'react-hot-toast';
 
 const LoginPage: React.FC = () => {
+  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -27,7 +29,8 @@ const LoginPage: React.FC = () => {
 
     try {
       await login(username, password);
-      // Success message will be shown by AuthContext
+      // Redirect to dashboard after successful login
+      navigate('/dashboard');
     } catch (error: any) {
       // Error message is already shown by AuthContext
       console.error('Login failed:', error);

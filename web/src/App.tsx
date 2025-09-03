@@ -5,6 +5,11 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import MainLayout from './layouts/MainLayout';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
+import UserManagement from './pages/UserManagement';
+import ProgramManagement from './pages/ProgramManagement';
+import ExamManagement from './pages/ExamManagement';
+import QuestionBank from './pages/QuestionBank';
+import Analytics from './pages/Analytics';
 
 // Loading Spinner Component
 const LoadingSpinner: React.FC = () => (
@@ -70,10 +75,7 @@ const AppRoutes: React.FC = () => {
         path="/users"
         element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <div className="p-6">
-              <h1 className="text-2xl font-bold mb-6">User Management</h1>
-              <p>User management features coming soon...</p>
-            </div>
+            <UserManagement />
           </ProtectedRoute>
         }
       />
@@ -82,10 +84,7 @@ const AppRoutes: React.FC = () => {
         path="/programs"
         element={
           <ProtectedRoute allowedRoles={['admin', 'teacher']}>
-            <div className="p-6">
-              <h1 className="text-2xl font-bold mb-6">Program Management</h1>
-              <p>Program and course management coming soon...</p>
-            </div>
+            <ProgramManagement />
           </ProtectedRoute>
         }
       />
@@ -94,10 +93,7 @@ const AppRoutes: React.FC = () => {
         path="/exams"
         element={
           <ProtectedRoute allowedRoles={['admin', 'teacher', 'student']}>
-            <div className="p-6">
-              <h1 className="text-2xl font-bold mb-6">Exam Management</h1>
-              <p>Exam creation, management, and attempt features coming soon...</p>
-            </div>
+            <ExamManagement />
           </ProtectedRoute>
         }
       />
@@ -106,10 +102,7 @@ const AppRoutes: React.FC = () => {
         path="/questions"
         element={
           <ProtectedRoute allowedRoles={['admin', 'teacher']}>
-            <div className="p-6">
-              <h1 className="text-2xl font-bold mb-6">Question Bank</h1>
-              <p>Question bank management and AI generation coming soon...</p>
-            </div>
+            <QuestionBank />
           </ProtectedRoute>
         }
       />
@@ -118,10 +111,7 @@ const AppRoutes: React.FC = () => {
         path="/analytics"
         element={
           <ProtectedRoute allowedRoles={['admin', 'teacher']}>
-            <div className="p-6">
-              <h1 className="text-2xl font-bold mb-6">Analytics</h1>
-              <p>CO/PO attainment analytics and reports coming soon...</p>
-            </div>
+            <Analytics />
           </ProtectedRoute>
         }
       />
