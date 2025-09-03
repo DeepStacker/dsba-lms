@@ -1,4 +1,4 @@
-// Apollo LMS TypeScript Type Definitions
+// DSBA LMS TypeScript Type Definitions
 
 // User & Authentication Types
 export interface User {

@@ -4,9 +4,9 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: apollo_lms
+      POSTGRES_DB: DSBA_lms
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: apollo
+      POSTGRES_PASSWORD: DSBA
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -28,7 +28,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:apollo@postgres/apollo_lms
+      - DATABASE_URL=postgresql+asyncpg://postgres:DSBA@postgres/DSBA_lms
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
       - AI_SERVICE_URL=http://ai-service:8001
@@ -96,7 +96,7 @@ services:
   #     context: ./backend
   #     dockerfile: Dockerfile
   #   environment:
-  #     - DATABASE_URL=postgresql+asyncpg://lmsadmin:apollo@postgres/apollo_lms
+  #     - DATABASE_URL=postgresql+asyncpg://lmsadmin:DSBA@postgres/DSBA_lms
   #     - REDIS_URL=redis://redis:6379
   #     - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
   #   depends_on:

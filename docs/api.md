@@ -1,8 +1,8 @@
-# Apollo LMS API Documentation
+# DSBA LMS API Documentation
 
 ## Overview
 
-Apollo LMS provides a comprehensive REST API for Learning Management System operations. The API is organized into logical modules with consistent authentication and error handling.
+DSBA LMS provides a comprehensive REST API for Learning Management System operations. The API is organized into logical modules with consistent authentication and error handling.
 
 ## Authentication
 

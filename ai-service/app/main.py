@@ -5,7 +5,7 @@ from typing import Dict, List, Any, Optional
 from .core.llm_adapter import get_llm_adapter
 
 app = FastAPI(
-    title="Apollo AI Service",
+    title="DSBA AI Service",
     description="AI-powered grading and content generation service",
     version="1.0.0",
 )

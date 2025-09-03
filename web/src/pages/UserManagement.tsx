@@ -50,11 +50,46 @@ const UserManagement: React.FC = () => {
     confirmPassword: ''
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
+  const [currentUsers, setCurrentUsers] = useState<User[]>([]);
 
-  // Fetch users data
+  // Fetch users data and apply filters
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  // Apply filtering and search
+  useEffect(() => {
+    let filteredUsers = [...users];
+
+    // Apply search query
+    if (searchQuery.trim()) {
+      filteredUsers = filteredUsers.filter(user =>
+        user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.department?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Apply filters
+    Object.entries(activeFilters).forEach(([key, value]) => {
+      if (value && value !== '') {
+        filteredUsers = filteredUsers.filter(user => {
+          if (key === 'role') {
+            return user.role === value;
+          } else if (key === 'status') {
+            return user.status === value;
+          } else if (key === 'department') {
+            return user.department?.toLowerCase().includes(value.toLowerCase());
+          }
+          return true;
+        });
+      }
+    });
+
+    setCurrentUsers(filteredUsers);
+  }, [users, searchQuery, activeFilters]);
 
   const fetchUsers = async () => {
     try {
@@ -122,64 +157,89 @@ const UserManagement: React.FC = () => {
     setEditingUser(null);
   };
 
-  const handleCreateUser = () => {
+  const handleCreateUser = async () => {
     if (!validateForm()) return;
 
-    setLoading(true);
-    const newUser: User = {
-      id: Date.now().toString(),
-      name: formData.name,
-      email: formData.email,
-      role: formData.role,
-      status: 'active',
-      department: formData.department,
-      phoneNumber: formData.phoneNumber,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
+    try {
+      setLoading(true);
+      const userData = {
+        email: formData.email,
+        password: formData.password,
+        full_name: formData.name,
+        role: formData.role,
+        department: formData.department,
+        enrollment_number: formData.enrollmentNumber,
+        phone_number: formData.phoneNumber
+      };
 
-    setTimeout(() => {
-      setUsers(prev => [...prev, newUser]);
-      setLoading(false);
+      await usersApi.createUser(userData);
+      toast.success('User created successfully!');
       setShowUserModal(false);
       resetForm();
-      toast.success('User created successfully!');
-    }, 1000);
+      await fetchUsers(); // Refresh the user list
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to create user';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUpdateUser = () => {
+  const handleUpdateUser = async () => {
     if (!validateForm()) return;
     if (!editingUser) return;
 
-    setLoading(true);
-    const updatedUser: User = {
-      ...editingUser,
-      name: formData.name,
-      email: formData.email,
-      role: formData.role,
-      department: formData.department,
-      phoneNumber: formData.phoneNumber
-    };
+    try {
+      setLoading(true);
+      const userData = {
+        email: formData.email,
+        full_name: formData.name,
+        role: formData.role,
+        department: formData.department,
+        enrollment_number: formData.enrollmentNumber,
+        phone_number: formData.phoneNumber
+      };
 
-    setTimeout(() => {
-      setUsers(prev => prev.map(u => u.id === editingUser.id ? updatedUser : u));
-      setLoading(false);
+      await usersApi.updateUser(parseInt(editingUser.id), userData);
+      toast.success('User updated successfully!');
       setShowUserModal(false);
       resetForm();
-      toast.success('User updated successfully!');
-    }, 1000);
+      await fetchUsers(); // Refresh the user list
+    } catch (error: any) {
+      console.error('Error updating user:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to update user';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDeleteUser = () => {
+  const handleDeleteUser = async () => {
     if (!deletingUser) return;
 
-    setLoading(true);
-    setTimeout(() => {
-      setUsers(prev => prev.filter(u => u.id !== deletingUser.id));
-      setLoading(false);
+    try {
+      setLoading(true);
+      await usersApi.deleteUser(parseInt(deletingUser.id));
+      toast.success('User deleted successfully!');
       setShowDeleteDialog(false);
       setDeletingUser(null);
-      toast.success('User deleted successfully!');
-    }, 1000);
+      await fetchUsers(); // Refresh the user list
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to delete user';
+      toast.error(errorMessage);
+      setShowDeleteDialog(false);
+      setDeletingUser(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openEditModal = (user: User) => {
@@ -202,12 +262,27 @@ const UserManagement: React.FC = () => {
     setShowDeleteDialog(true);
   };
 
-  const toggleUserStatus = (user: User) => {
-    const newStatus = user.status === 'active' ? 'inactive' : 'active';
-    setUsers(prev => prev.map(u =>
-      u.id === user.id ? { ...u, status: newStatus } : u
-    ));
-    toast.success(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully!`);
+  const toggleUserStatus = async (user: User) => {
+    try {
+      setLoading(true);
+      const newStatus = user.status === 'active' ? 'inactive' : 'active';
+
+      const userData = {
+        is_active: newStatus === 'active'
+      };
+
+      await usersApi.updateUser(parseInt(user.id), userData);
+      toast.success(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully!`);
+      await fetchUsers(); // Refresh the user list
+    } catch (error: any) {
+      console.error('Error updating user status:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to update user status';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const columns = [
@@ -349,12 +424,10 @@ const UserManagement: React.FC = () => {
       {/* Search and Filters */}
       <SearchFilter
         onSearch={(query) => {
-          // Implement search logic
-          console.log('Searching for:', query);
+          setSearchQuery(query);
         }}
         onFilter={(filters) => {
-          // Implement filter logic
-          console.log('Applied filters:', filters);
+          setActiveFilters(filters);
         }}
         filterOptions={filterOptions}
         className="mb-4"
@@ -363,11 +436,15 @@ const UserManagement: React.FC = () => {
       {/* Users Table */}
       <Card className="p-6">
         <DataTable
-          data={users}
+          data={currentUsers.length > 0 ? currentUsers : (searchQuery || Object.keys(activeFilters).length > 0 ? [] : users)}
           columns={columns}
           loading={loading}
           itemsPerPage={10}
-          emptyMessage="No users found"
+          emptyMessage={
+            searchQuery || Object.keys(activeFilters).length > 0
+              ? "No users found matching your search criteria"
+              : "No users found"
+          }
         />
       </Card>
 

@@ -9,13 +9,13 @@ import { Select } from '../components/common/Select';
 import { Input } from '../components/common/Input';
 import { Textarea } from '../components/common/Textarea';
 import { FileUpload } from '../components/common/FileUpload';
+import { programsApi, coursesApi } from '../utils/api';
 import {
   PlusIcon,
   PencilIcon,
   TrashIcon,
   EyeIcon,
   BookOpenIcon,
-
   DocumentCheckIcon
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
@@ -83,71 +83,64 @@ const ProgramManagement: React.FC = () => {
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // Mock data
+  // Fetch programs and courses data
   useEffect(() => {
-    setLoading(true);
-    const mockPrograms: Program[] = [
-      {
-        id: '1',
-        name: 'Bachelor of Computer Science',
-        code: 'BCS',
-        department: 'Computer Science',
-        duration: 8,
-        durationType: 'semesters',
-        totalCredits: 144,
-        description: 'Comprehensive program covering computer science fundamentals and advanced topics',
-        status: 'active',
-        createdAt: '2023-01-01',
-        updatedAt: '2024-01-15',
-        courseCount: 28,
-        enrolledStudents: 150
-      },
-      {
-        id: '2',
-        name: 'Master of Business Administration',
-        code: 'MBA',
-        department: 'Management',
-        duration: 4,
-        durationType: 'semesters',
-        totalCredits: 96,
-        description: 'Professional management education program',
-        status: 'active',
-        createdAt: '2023-02-01',
-        updatedAt: '2024-01-20',
-        courseCount: 18,
-        enrolledStudents: 80
-      }
-    ];
-
-    const mockCourses: Course[] = [
-      {
-        id: '1',
-        programId: '1',
-        name: 'Data Structures and Algorithms',
-        code: 'CS101',
-        credits: 4,
-        semester: 3,
-        courseType: 'core',
-        description: 'Fundamental data structures and algorithms'
-      },
-      {
-        id: '2',
-        programId: '1',
-        name: 'Database Management Systems',
-        code: 'CS201',
-        credits: 3,
-        semester: 5,
-        courseType: 'core',
-        description: 'Database design and SQL programming'
-      }
-    ];
-
-    setTimeout(() => {
-      setPrograms(mockPrograms);
-      setCourses(mockCourses);
-      setLoading(false);
-    }, 1000);
+    fetchPrograms();
+    fetchCourses();
   }, []);
+
+  const fetchPrograms = async () => {
+    try {
+      setLoading(true);
+      const response = await programsApi.getPrograms({ skip: 0, limit: 100 });
+      if (response) {
+        const mappedPrograms: Program[] = response.map((program: any) => ({
+          id: String(program.id),
+          name: program.name,
+          code: program.code,
+          department: program.department,
+          duration: program.duration || 4,
+          durationType: (program.duration_type || 'semesters') as 'semesters' | 'years',
+          totalCredits: program.total_credits || 120,
+          description: program.description || '',
+          status: program.is_active ? 'active' : 'inactive',
+          syllabus: program.syllabus_url,
+          createdAt: program.created_at || '',
+          updatedAt: program.updated_at || '',
+          courseCount: program.courses_count || 0,
+          enrolledStudents: program.enrolled_students_count || 0
+        }));
+        setPrograms(mappedPrograms);
+      }
+    } catch (error) {
+      console.error('Error fetching programs:', error);
+      toast.error('Failed to fetch programs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCourses = async () => {
+    try {
+      const response = await coursesApi.getCourses({ skip: 0, limit: 500 });
+      if (response) {
+        const mappedCourses: Course[] = response.map((course: any) => ({
+          id: String(course.id),
+          programId: String(course.program_id),
+          name: course.name,
+          code: course.code,
+          credits: course.credits || 3,
+          semester: course.semester || 1,
+          courseType: (course.course_type || 'core') as 'core' | 'elective' | 'lab',
+          description: course.description || ''
+        }));
+        setCourses(mappedCourses);
+      }
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+      toast.error('Failed to fetch courses');
+     }
+  };
 
   const validateProgramForm = () => {
     const errors: Record<string, string> = {};
@@ -198,96 +191,156 @@ const ProgramManagement: React.FC = () => {
     setEditingCourse(null);
   };
 
-  const handleCreateProgram = () => {
+  const handleCreateProgram = async () => {
     if (!validateProgramForm()) return;
-    setLoading(true);
-    const newProgram: Program = {
-      id: Date.now().toString(),
-      ...programFormData,
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      courseCount: 0,
-      enrolledStudents: 0
-    };
-    setTimeout(() => {
-      setPrograms(prev => [...prev, newProgram]);
-      setLoading(false);
+
+    try {
+      setLoading(true);
+      const programData = {
+        name: programFormData.name,
+        code: programFormData.code,
+        department: programFormData.department,
+        duration: programFormData.duration,
+        duration_type: programFormData.durationType,
+        total_credits: programFormData.totalCredits,
+        description: programFormData.description,
+        is_active: true
+      };
+
+      await programsApi.createProgram(programData);
+      toast.success('Program created successfully!');
       setShowProgramModal(false);
       resetProgramForm();
-      toast.success('Program created successfully!');
-    }, 1000);
+      await fetchPrograms(); // Refresh the programs list
+    } catch (error: any) {
+      console.error('Error creating program:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to create program';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUpdateProgram = () => {
+  const handleUpdateProgram = async () => {
     if (!validateProgramForm()) return;
     if (!editingProgram) return;
-    setLoading(true);
-    const updatedProgram: Program = {
-      ...editingProgram,
-      ...programFormData,
-      updatedAt: new Date().toISOString()
-    };
-    setTimeout(() => {
-      setPrograms(prev => prev.map(p => p.id === editingProgram.id ? updatedProgram : p));
-      setLoading(false);
+
+    try {
+      setLoading(true);
+      const programData = {
+        name: programFormData.name,
+        code: programFormData.code,
+        department: programFormData.department,
+        duration: programFormData.duration,
+        duration_type: programFormData.durationType,
+        total_credits: programFormData.totalCredits,
+        description: programFormData.description,
+        is_active: editingProgram.status === 'active'
+      };
+
+      await programsApi.updateProgram(parseInt(editingProgram.id), programData);
+      toast.success('Program updated successfully!');
       setShowProgramModal(false);
       resetProgramForm();
-      toast.success('Program updated successfully!');
-    }, 1000);
+      await fetchPrograms(); // Refresh the programs list
+    } catch (error: any) {
+      console.error('Error updating program:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to update program';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleCreateCourse = () => {
+  const handleCreateCourse = async () => {
     if (!validateCourseForm()) return;
     if (!selectedProgram) return;
-    setLoading(true);
-    const newCourse: Course = {
-      id: Date.now().toString(),
-      programId: selectedProgram,
-      ...courseFormData
-    };
-    setTimeout(() => {
-      setCourses(prev => [...prev, newCourse]);
-      // Update program course count
-      setPrograms(prev => prev.map(p =>
-        p.id === selectedProgram ? { ...p, courseCount: p.courseCount + 1 } : p
-      ));
-      setLoading(false);
+
+    try {
+      setLoading(true);
+      const courseData = {
+        program_id: parseInt(selectedProgram),
+        name: courseFormData.name,
+        code: courseFormData.code,
+        credits: courseFormData.credits,
+        semester: courseFormData.semester,
+        course_type: courseFormData.courseType,
+        description: courseFormData.description
+      };
+
+      await coursesApi.createCourse(courseData);
+      toast.success('Course created successfully!');
       setShowCourseModal(false);
       resetCourseForm();
-      toast.success('Course created successfully!');
-    }, 1000);
+      await fetchCourses(); // Refresh the courses list
+    } catch (error: any) {
+      console.error('Error creating course:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to create course';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUpdateCourse = () => {
+  const handleUpdateCourse = async () => {
     if (!validateCourseForm()) return;
     if (!editingCourse) return;
-    setLoading(true);
-    const updatedCourse: Course = {
-      ...editingCourse,
-      ...courseFormData
-    };
-    setTimeout(() => {
-      setCourses(prev => prev.map(c => c.id === editingCourse.id ? updatedCourse : c));
-      setLoading(false);
+
+    try {
+      setLoading(true);
+      const courseData = {
+        name: courseFormData.name,
+        code: courseFormData.code,
+        credits: courseFormData.credits,
+        semester: courseFormData.semester,
+        course_type: courseFormData.courseType,
+        description: courseFormData.description
+      };
+
+      await coursesApi.updateCourse(parseInt(editingCourse.id), courseData);
+      toast.success('Course updated successfully!');
       setShowCourseModal(false);
       resetCourseForm();
-      toast.success('Course updated successfully!');
-    }, 1000);
+      await fetchCourses(); // Refresh the courses list
+    } catch (error: any) {
+      console.error('Error updating course:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to update course';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDeleteProgram = () => {
+  const handleDeleteProgram = async () => {
     if (!deletingProgram) return;
-    setLoading(true);
-    setTimeout(() => {
-      setPrograms(prev => prev.filter(p => p.id !== deletingProgram.id));
-      // Also remove associated courses
-      setCourses(prev => prev.filter(c => c.programId !== deletingProgram.id));
-      setLoading(false);
+
+    try {
+      setLoading(true);
+      await programsApi.deleteProgram(parseInt(deletingProgram.id));
+      toast.success('Program deleted successfully!');
       setShowDeleteDialog(false);
       setDeletingProgram(null);
-      toast.success('Program deleted successfully!');
-    }, 1000);
+      await fetchPrograms(); // Refresh the programs list
+      await fetchCourses(); // Refresh the courses list (to remove associated courses)
+    } catch (error: any) {
+      console.error('Error deleting program:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to delete program';
+      toast.error(errorMessage);
+      setShowDeleteDialog(false);
+      setDeletingProgram(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openEditProgram = (program: Program) => {
@@ -468,13 +521,19 @@ const ProgramManagement: React.FC = () => {
             <PencilIcon className="h-4 w-4" />
           </button>
           <button
-            onClick={() => {
-              setCourses(prev => prev.filter(c => c.id !== course.id));
-              // Update program course count
-              setPrograms(prev => prev.map(p =>
-                p.id === course.programId ? { ...p, courseCount: p.courseCount - 1 } : p
-              ));
-              toast.success('Course deleted successfully!');
+            onClick={async () => {
+              try {
+                await coursesApi.deleteCourse(parseInt(course.id));
+                toast.success('Course deleted successfully!');
+                await fetchCourses(); // Refresh the courses list
+                await fetchPrograms(); // Refresh program course counts
+              } catch (error: any) {
+                console.error('Error deleting course:', error);
+                const errorMessage = error.response?.data?.detail ||
+                                    error.response?.data?.message ||
+                                    'Failed to delete course';
+                toast.error(errorMessage);
+              }
             }}
             className="text-red-600 hover:text-red-900 p-1"
             title="Delete"

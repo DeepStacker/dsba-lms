@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React from 'react';
 import { ChevronDownIcon, CheckIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
 import { Listbox } from '@headlessui/react';
 
@@ -19,7 +19,6 @@ interface SelectProps {
   disabled?: boolean;
   className?: string;
   multiple?: boolean;
-  searchable?: boolean;
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -33,7 +32,6 @@ export const Select: React.FC<SelectProps> = ({
   disabled = false,
   className = '',
   multiple = false,
-  searchable = false,
 }) => {
   const selectedOption = options.find(option => option.value === value);
   const selectedOptions = multiple && Array.isArray(value)

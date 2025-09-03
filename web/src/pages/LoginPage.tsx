@@ -46,7 +46,7 @@ const LoginPage: React.FC = () => {
             <span className="text-white text-2xl font-bold">🎓</span>
           </div>
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            Apollo LMS
+            DSBA LMS
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             Sign in to access your learning management system

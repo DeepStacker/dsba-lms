@@ -41,11 +41,11 @@ async def create_user(
     password_hash = get_password_hash(user_data.password)
     user_dict = user_data.dict()
     user_dict.pop("password")
-    user_dict["password_hash"] = password_hash
+    user_dict["hashed_password"] = password_hash
     user_dict["created_by"] = current_user.id
 
     result = await db.execute("""
-        INSERT INTO users (email, name, role, password_hash, is_active, created_by)
+        INSERT INTO users (email, name, role, hashed_password, is_active, created_by)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, email, name, role, is_active, created_at
     """, (

@@ -1,8 +1,8 @@
-# Saturn APOLLO LMS - PRD & SRS
+# Saturn DSBA LMS - PRD & SRS
 
 ## Project Overview
 
-**Apollo LMS (Academic Program Outcomes Learning and Operations Layer)** is an enterprise-grade Learning Management System designed specifically for educational institutions with accounting and engineering accreditation requirements.
+**DSBA LMS (Academic Program Outcomes Learning and Operations Layer)** is an enterprise-grade Learning Management System designed specifically for educational institutions with accounting and engineering accreditation requirements.
 
 ## Executive Summary
 

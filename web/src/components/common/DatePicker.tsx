@@ -28,7 +28,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   minDate,
   maxDate,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+    const [, setIsOpen] = useState(false); // eslint-disable-line no-unused-vars
 
   const formatDateForDisplay = (date: Date) => {
     if (isToday(date)) return 'Today';

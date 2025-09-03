@@ -222,7 +222,7 @@ jobs:
         tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
         labels: |
           org.opencontainers.image.title=${{ github.event.repository.name }}
-          org.opencontainers.image.description=Apollo LMS Backend API
+          org.opencontainers.image.description=DSBA LMS Backend API
           org.opencontainers.image.source=${{ github.event.repository.html_url }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
@@ -237,7 +237,7 @@ jobs:
         tags: ${{ env.REGISTRY }}/${{ env.AI_SERVICE_IMAGE }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.AI_SERVICE_IMAGE }}:latest
         labels: |
           org.opencontainers.image.title=${{ github.event.repository.name }}-ai
-          org.opencontainers.image.description=Apollo LMS AI Service
+          org.opencontainers.image.description=DSBA LMS AI Service
           org.opencontainers.image.source=${{ github.event.repository.html_url }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
@@ -252,7 +252,7 @@ jobs:
         tags: ${{ env.REGISTRY }}/${{ env.WEB_IMAGE }}:${{ github.sha }},${{ env.REGISTRY }}/${{ env.WEB_IMAGE }}:latest
         labels: |
           org.opencontainers.image.title=${{ github.event.repository.name }}-web
-          org.opencontainers.image.description=Apollo LMS Frontend
+          org.opencontainers.image.description=DSBA LMS Frontend
           org.opencontainers.image.source=${{ github.event.repository.html_url }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
@@ -288,9 +288,9 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_DB: apollo_lms
-          POSTGRES_PASSWORD: apollo
-          POSTGRES_USER: apollo
+          POSTGRES_DB: DSBA_lms
+          POSTGRES_PASSWORD: DSBA
+          POSTGRES_USER: DSBA
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
@@ -381,7 +381,7 @@ jobs:
           
           # Send Slack/Discord notification
           # curl -X POST -H 'Content-type: application/json' \
-          # --data '{"text":"🚀 Apollo LMS deployment successful"}' \
+          # --data '{"text":"🚀 DSBA LMS deployment successful"}' \
           # ${{ secrets.SLACK_WEBHOOK_URL }}
           
         else

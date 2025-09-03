@@ -1,5 +1,5 @@
 """
-Audit logging utilities for Apollo LMS
+Audit logging utilities for DSBA LMS
 """
 
 import hashlib

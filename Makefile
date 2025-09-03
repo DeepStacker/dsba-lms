@@ -17,7 +17,7 @@ all: setup build test
 
 # Setup development environment
 setup: .env
-	@echo "$(GREEN)🔧 Setting up Apollo LMS development environment...$(NC)"
+	@echo "$(GREEN)🔧 Setting up DSBA LMS development environment...$(NC)"
 	@cp .env.example .env
 	@$(MAKE) install-deps
 	@echo "$(GREEN)✅ Setup complete! Run 'make dev' to start development.$(NC)"
@@ -31,7 +31,7 @@ install-deps:
 
 # Development environment
 dev:
-	@echo "$(GREEN)🚀 Starting Apollo LMS development environment...$(NC)"
+	@echo "$(GREEN)🚀 Starting DSBA LMS development environment...$(NC)"
 	@echo "Frontend: http://localhost:3000"
 	@echo "Backend API: http://localhost:8000"
 	@echo "AI Service: http://localhost:8001"
@@ -143,7 +143,7 @@ logs-ai:
 health:
 	@echo "$(GREEN)🏥 Service health checks...$(NC)"
 	@echo "Backend API: http://localhost:8000/health"
-	@echo "Database: $(shell $(DOCKER_COMPOSE) exec postgres pg_isready -h localhost -U lmsadmin -d apollo_lms > /dev/null 2>&1 && echo '✅ UP' || echo '❌ DOWN')"
+	@echo "Database: $(shell $(DOCKER_COMPOSE) exec postgres pg_isready -h localhost -U lmsadmin -d DSBA_lms > /dev/null 2>&1 && echo '✅ UP' || echo '❌ DOWN')"
 	@echo "Redis: $(shell $(DOCKER_COMPOSE) exec redis redis-cli ping > /dev/null 2>&1 && echo '✅ UP' || echo '❌ DOWN')"
 
 wait-healthy:
@@ -205,7 +205,7 @@ demo-exams:
 
 # Help
 help:
-	@echo "$(GREEN)🔧 Apollo LMS Development Commands:$(NC)"
+	@echo "$(GREEN)🔧 DSBA LMS Development Commands:$(NC)"
 	@echo ""
 	@echo "Setup:"
 	@echo "  make setup            Setup development environment"
@@ -248,4 +248,4 @@ help:
 	@echo "  make clean            Clean up everything"
 	@echo "  make help             Show this help message"
 	@echo ""
-	@echo "$(GREEN)🎓 Happy coding with Apollo LMS!$(NC)"
+	@echo "$(GREEN)🎓 Happy coding with DSBA LMS!$(NC)"

@@ -5,14 +5,14 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from .core.database import create_tables
 from .core.config import settings
-from .routes import auth, exams, programs, questions, users, reports  # admin, grading commented out
+from .routes import auth, exams, programs, questions, users, reports, admin, grading
 import sentry_sdk
 
 if settings.sentry_dsn:
     sentry_sdk.init(dsn=settings.sentry_dsn, integrations=[])
 
 app = FastAPI(
-    title="Apollo LMS API",
+    title="DSBA LMS API",
     description="""
     AI-powered Learning Management System for educational institutions.
 
@@ -48,7 +48,7 @@ def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
     openapi_schema = get_openapi(
-        title="Apollo LMS API",
+        title="DSBA LMS API",
         version="1.0.0",
         description="""
         AI-powered Learning Management System.
@@ -77,8 +77,8 @@ async def health_check():
     return {"status": "healthy", "version": "1.0.0"}
 
 # Include routers
-# app.include_router(admin.router, prefix="/api/v1", tags=["Admin"])
-# app.include_router(grading.router, prefix="/api/v1", tags=["Grading"])  # Commented out - schemas missing
+app.include_router(admin.router, prefix="/api/v1", tags=["Admin"])
+app.include_router(grading.router, prefix="/api/v1", tags=["Grading"])
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
 app.include_router(programs.router, prefix="/programs", tags=["Programs"])
@@ -91,7 +91,7 @@ app.include_router(reports.router, prefix="/reports", tags=["Reports"])
 async def custom_swagger_ui_html():
     return get_swagger_ui_html(
         openapi_url="/openapi.json",
-        title="Apollo LMS API Docs",
+        title="DSBA LMS API Docs",
         oauth2_redirect_url=None,
         swagger_ui_parameters={"deepLinking": True, "presets": "[]", "docExpansion": "list"}
     )

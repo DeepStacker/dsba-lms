@@ -21,9 +21,6 @@ export const API_ENDPOINTS = {
 
   // Users
   users: {
-    me: '/users/me',
-    changePassword: '/users/me/change-password',
-    updateProfile: '/users/me',
     list: '/users',
     create: '/users',
     get: (id: number) => `/users/${id}`,
@@ -31,6 +28,7 @@ export const API_ENDPOINTS = {
     delete: (id: number) => `/users/${id}`,
     bulkImport: '/users/bulk-import',
     bulkResetPassword: '/users/bulk-reset-password',
+    changePassword: (id: number) => `/users/${id}/change-password`,
   },
 
   // Programs and Courses
@@ -433,7 +431,7 @@ export const authApi = {
 
   async getCurrentUser() {
     return fetchWithErrorHandling(
-      apiClient.get(API_ENDPOINTS.users.me),
+      apiClient.get(`${API_ENDPOINTS.auth.login.split('/login')[0]}/me`),
       'Failed to fetch user profile'
     );
   },
@@ -650,6 +648,80 @@ export const gradingApi = {
     return fetchWithErrorHandling(
       apiClient.get(API_ENDPOINTS.grading.progress(examId)),
       'Failed to fetch grading progress'
+    );
+  },
+};
+
+export const programsApi = {
+  async getPrograms(params?: { skip?: number; limit?: number; search?: string; status?: string }) {
+    return fetchWithErrorHandling(
+      apiClient.get(API_ENDPOINTS.programs.list, params),
+      'Failed to fetch programs'
+    );
+  },
+
+  async createProgram(programData: any) {
+    return fetchWithErrorHandling(
+      apiClient.post(API_ENDPOINTS.programs.create, programData),
+      'Failed to create program'
+    );
+  },
+
+  async getProgram(programId: number) {
+    return fetchWithErrorHandling(
+      apiClient.get(API_ENDPOINTS.programs.get(programId)),
+      'Failed to fetch program'
+    );
+  },
+
+  async updateProgram(programId: number, programData: any) {
+    return fetchWithErrorHandling(
+      apiClient.put(API_ENDPOINTS.programs.update(programId), programData),
+      'Failed to update program'
+    );
+  },
+
+  async deleteProgram(programId: number) {
+    return fetchWithErrorHandling(
+      apiClient.delete(API_ENDPOINTS.programs.delete(programId)),
+      'Failed to delete program'
+    );
+  },
+};
+
+export const coursesApi = {
+  async getCourses(params?: { skip?: number; limit?: number; programId?: number; search?: string }) {
+    return fetchWithErrorHandling(
+      apiClient.get(API_ENDPOINTS.courses.list, params),
+      'Failed to fetch courses'
+    );
+  },
+
+  async createCourse(courseData: any) {
+    return fetchWithErrorHandling(
+      apiClient.post(API_ENDPOINTS.courses.create, courseData),
+      'Failed to create course'
+    );
+  },
+
+  async getCourse(courseId: number) {
+    return fetchWithErrorHandling(
+      apiClient.get(API_ENDPOINTS.courses.get(courseId)),
+      'Failed to fetch course'
+    );
+  },
+
+  async updateCourse(courseId: number, courseData: any) {
+    return fetchWithErrorHandling(
+      apiClient.put(API_ENDPOINTS.courses.update(courseId), courseData),
+      'Failed to update course'
+    );
+  },
+
+  async deleteCourse(courseId: number) {
+    return fetchWithErrorHandling(
+      apiClient.delete(API_ENDPOINTS.courses.delete(courseId)),
+      'Failed to delete course'
     );
   },
 };

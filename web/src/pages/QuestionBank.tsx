@@ -50,6 +50,9 @@ const QuestionBank: React.FC = () => {
   const [diGenerating, setAIGenerating] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [selectedQuestions, setSelectedQuestions] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
+  const [currentQuestions, setCurrentQuestions] = useState<Question[]>([]);
 
   const [questionFormData, setQuestionFormData] = useState({
     text: '',
@@ -79,6 +82,38 @@ const QuestionBank: React.FC = () => {
   useEffect(() => {
     fetchQuestions();
   }, []);
+
+  // Apply filtering and search
+  useEffect(() => {
+    let filteredQuestions = [...questions];
+
+    // Apply search query
+    if (searchQuery.trim()) {
+      filteredQuestions = filteredQuestions.filter(question =>
+        question.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        question.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        question.topic.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Apply filters
+    Object.entries(activeFilters).forEach(([key, value]) => {
+      if (value && value !== '') {
+        filteredQuestions = filteredQuestions.filter(question => {
+          if (key === 'type') {
+            return question.type === value;
+          } else if (key === 'difficulty') {
+            return question.difficulty === value;
+          } else if (key === 'subject') {
+            return question.subject?.toLowerCase().includes(value.toLowerCase());
+          }
+          return true;
+        });
+      }
+    });
+
+    setCurrentQuestions(filteredQuestions);
+  }, [questions, searchQuery, activeFilters]);
 
   const fetchQuestions = async () => {
     try {
@@ -178,8 +213,65 @@ const QuestionBank: React.FC = () => {
       setShowQuestionModal(false);
       resetQuestionForm();
       fetchQuestions();
-    } catch (error) {
-      toast.error('Failed to create question');
+    } catch (error: any) {
+      console.error('Error creating question:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to create question';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateQuestion = async () => {
+    if (!validateQuestionForm()) return;
+    if (!editingQuestion) return;
+
+    try {
+      setLoading(true);
+      const questionData = {
+        text: questionFormData.text,
+        type: questionFormData.type,
+        subject: questionFormData.subject,
+        topic: questionFormData.topic,
+        difficulty: questionFormData.difficulty,
+        marks: questionFormData.marks,
+        options: questionFormData.options.filter(opt => opt.trim()),
+        correct_answer: questionFormData.correctAnswer,
+        model_answer: questionFormData.modelAnswer,
+        rubric_json: questionFormData.rubricJson || '{}',
+        tags: questionFormData.tags
+      };
+
+      await questionsApi.updateQuestion(parseInt(editingQuestion.id), questionData);
+      toast.success('Question updated successfully!');
+      setShowQuestionModal(false);
+      resetQuestionForm();
+      fetchQuestions();
+    } catch (error: any) {
+      console.error('Error updating question:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to update question';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteQuestion = async (questionId: string) => {
+    try {
+      setLoading(true);
+      await questionsApi.deleteQuestion(parseInt(questionId));
+      toast.success('Question deleted successfully!');
+      fetchQuestions();
+    } catch (error: any) {
+      console.error('Error deleting question:', error);
+      const errorMessage = error.response?.data?.detail ||
+                          error.response?.data?.message ||
+                          'Failed to delete question';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -420,19 +512,23 @@ const QuestionBank: React.FC = () => {
 
       {/* Search and Filters */}
       <SearchFilter
-        onSearch={(query) => console.log('Searching questions:', query)}
-        onFilter={(filters) => console.log('Applied filters:', filters)}
+        onSearch={(query) => setSearchQuery(query)}
+        onFilter={(filters) => setActiveFilters(filters)}
         filterOptions={filterOptions}
       />
 
       {/* Questions Table */}
       <Card className="p-6">
         <DataTable
-          data={questions}
+          data={currentQuestions.length > 0 ? currentQuestions : (searchQuery || Object.keys(activeFilters).length > 0 ? [] : questions)}
           columns={columns}
           loading={loading}
           itemsPerPage={15}
-          emptyMessage="No questions found"
+          emptyMessage={
+            searchQuery || Object.keys(activeFilters).length > 0
+              ? "No questions found matching your criteria"
+              : "No questions found"
+          }
         />
       </Card>
 

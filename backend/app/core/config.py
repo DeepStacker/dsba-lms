@@ -4,13 +4,13 @@ import os
 
 class Settings(BaseSettings):
     # Database settings from environment
-    database_url: str = "postgresql+asyncpg://postgres:apollo@postgres/apollo_lms"
+    database_url: str = "postgresql+asyncpg://postgres:DSBA@postgres/DSBA_lms"
 
     # Alternative database settings (used when database_url is not set)
     postgres_host: str = "postgres"
-    postgres_db: str = "apollo_lms"
+    postgres_db: str = "DSBA_lms"
     postgres_user: str = "postgres"
-    postgres_password: str = "apollo"
+    postgres_password: str = "DSBA"
 
     # Redis
     redis_url: str = "redis://redis:6379"

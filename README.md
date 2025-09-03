@@ -1,10 +1,10 @@
-# 🚀 Apollo LMS - AI-Powered Learning Management System
+# 🚀 DSBA LMS - AI-Powered Learning Management System
 
 > Production-grade, enterprise-ready LMS with AI-assisted grading, real-time proctoring, and comprehensive CO/PO mapping
 
 ## 🎯 Overview
 
-Apollo LMS is a comprehensive educational platform designed for colleges and universities that combines:
+DSBA LMS is a comprehensive educational platform designed for colleges and universities that combines:
 
 - **🤖 AI-Powered Grading**: Intelligent assessment with ML-driven feedback
 - **📊 CO/PO Mapping**: Automated curriculum outcome tracking and accreditation compliance
@@ -59,7 +59,7 @@ Apollo LMS is a comprehensive educational platform designed for colleges and uni
 ## 🏗️ Architecture
 
 ```
-apollo-lms/
+DSBA-lms/
 ├── backend/                 # FastAPI microservice
 │   ├── app/
 │   │   ├── core/           # Auth, Security, Database, AI client
@@ -132,8 +132,8 @@ apollo-lms/
 
 ```bash
 # Clone and setup
-git clone <repository-url> apollo-lms
-cd apollo-lms
+git clone <repository-url> DSBA-lms
+cd DSBA-lms
 
 # Configure environment (copy and modify as needed)
 cp .env.example .env
@@ -430,7 +430,7 @@ npm run test:e2e              # Headless CI
 version: '3.8'
 services:
   backend:
-    image: apollo/backend:latest
+    image: DSBA/backend:latest
     environment:
       - ENVIRONMENT=production
       - WORKERS=4
@@ -439,7 +439,7 @@ services:
       - backups:/backups
 
   ai-worker:
-    image: apollo/ai-worker:latest
+    image: DSBA/ai-worker:latest
     deploy:
       replicas: 3
     environment:
@@ -464,17 +464,17 @@ services:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: apollo-backend
+  name: DSBA-backend
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: apollo-backend
+      app: DSBA-backend
   template:
     spec:
       containers:
       - name: backend
-        image: apollo/backend:latest
+        image: DSBA/backend:latest
         env:
         - name: DATABASE_URL
           value: "postgresql://"
@@ -537,10 +537,10 @@ spec:
 
 ## 📞 Support
 
-- **Documentation**: [`https://docs.apollo-lms.edu`](https://docs.apollo-lms.edu)
-- **API Reference**: [`https://api.apollo-lms.edu/docs`](https://api.apollo-lms.edu/docs)
+- **Documentation**: [`https://docs.DSBA-lms.edu`](https://docs.DSBA-lms.edu)
+- **API Reference**: [`https://api.DSBA-lms.edu/docs`](https://api.DSBA-lms.edu/docs)
 - **Issues**: GitHub Issues for bug reports and feature requests
-- **Security**: `security@apollo-lms.edu` for security concerns
+- **Security**: `security@DSBA-lms.edu` for security concerns
 
 ## 📄 License
 

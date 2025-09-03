@@ -10,9 +10,9 @@ class TestSettings:
         test_settings = Settings()
 
         assert test_settings.postgres_host == "localhost"
-        assert test_settings.postgres_db == "apollo"
-        assert test_settings.postgres_user == "apollo"
-        assert test_settings.postgres_password == "apollo"
+        assert test_settings.postgres_db == "DSBA"
+        assert test_settings.postgres_user == "DSBA"
+        assert test_settings.postgres_password == "DSBA"
         assert test_settings.environment == "development"
         assert test_settings.jwt_expires_min == 15
         assert test_settings.refresh_expires_days == 7
@@ -20,13 +20,13 @@ class TestSettings:
     def test_settings_property_sync_database_url(self):
         """Test that sync_database_url property works correctly."""
         test_settings = Settings()
-        expected_url = "postgresql://apollo:apollo@localhost/apollo"
+        expected_url = "postgresql://DSBA:DSBA@localhost/DSBA"
         assert test_settings.sync_database_url == expected_url
 
     def test_settings_property_async_database_url(self):
         """Test that async_database_url property works correctly."""
         test_settings = Settings()
-        expected_url = "postgresql+asyncpg://apollo:apollo@localhost/apollo"
+        expected_url = "postgresql+asyncpg://DSBA:DSBA@localhost/DSBA"
         assert test_settings.async_database_url == expected_url
 
     def test_settings_custom_database_url(self):

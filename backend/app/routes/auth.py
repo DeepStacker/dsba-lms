@@ -3,8 +3,10 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from pydantic import BaseModel
+import datetime
 from ..core.database import get_db
 from ..core.security import verify_password, create_access_token, create_refresh_token, verify_token, get_password_hash
+from ..core.dependencies import get_current_user as get_current_user_dependency
 from ..models import User
 
 router = APIRouter()
@@ -39,8 +41,8 @@ async def login(
         )
         user = email_result.scalar_one_or_none()
 
-    # TEMPORARY: Simple password check for testing
-    if not user or (request.password != "ChangeMe#1" and user.hashed_password != request.password):
+    # Proper password verification
+    if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -56,9 +58,15 @@ async def login(
     access_token = create_access_token(data={
         "sub": user.username,
         "user_id": user.id,
+        "username": user.username,
         "email": user.email,
         "name": user.name,
-        "role": user.role.value  # Convert enum to string
+        "role": user.role.value,  # Convert enum to string
+        "phone": user.phone,
+        "is_active": user.is_active,
+        "mfa_enabled": user.mfa_enabled,
+        # last_login handling removed for now to avoid serialization issues
+        "first_login": False  # Default for now, can be extended later
     })
     refresh_token = create_refresh_token(data={"sub": user.username})
 
@@ -135,3 +143,15 @@ async def logout():
     # In a real implementation, you might want to blacklist tokens
     # For now, just return success
     return {"message": "Successfully logged out"}
+
+@router.get("/me")
+async def get_current_user(user: User = Depends(get_current_user_dependency)):
+    """Get current user information from JWT token"""
+    return UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        name=user.name,
+        role=user.role.value,
+        is_active=user.is_active
+    )

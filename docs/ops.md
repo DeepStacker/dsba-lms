@@ -1,12 +1,12 @@
-# Apollo LMS - Operations Guide
+# DSBA LMS - Operations Guide
 
 ## Quick Start
 
 ### Local Development
 ```bash
 # Clone repository
-git clone https://github.com/your-org/apollo-lms.git
-cd apollo-lms
+git clone https://github.com/your-org/DSBA-lms.git
+cd DSBA-lms
 
 # Start with Docker (recommended)
 make up
@@ -90,7 +90,7 @@ make k8s-deploy
 ## Directory Structure
 
 ```
-apollo-lms/
+DSBA-lms/
 ├── backend/                   # FastAPI backend
 │   ├── app/
 │   │   ├── core/             # Configuration & utilities
@@ -120,7 +120,7 @@ apollo-lms/
 #### Backend Service
 ```bash
 # Database
-DATABASE_URL=postgresql://user:password@localhost/apollo_lms
+DATABASE_URL=postgresql://user:password@localhost/DSBA_lms
 REDIS_URL=redis://localhost:6379
 
 # Authentication
@@ -235,10 +235,10 @@ kubectl apply -f k8s/prerequisites/
 make k8s-deploy
 
 # Check status
-kubectl get pods,svc,ingress -l app=apollo-lms
+kubectl get pods,svc,ingress -l app=DSBA-lms
 
 # Scale deployment
-kubectl scale deployment apollo-backend --replicas=3
+kubectl scale deployment DSBA-backend --replicas=3
 ```
 
 ### Cloud Platform Deployment
@@ -281,13 +281,13 @@ make migrate-check
 ### Backup & Restore
 ```bash
 # Backup database
-docker exec apollo-postgres pg_dump -U apollo apollo_lms > backup.sql
+docker exec DSBA-postgres pg_dump -U DSBA DSBA_lms > backup.sql
 
 # Restore database
-docker exec -i apollo-postgres psql -U apollo -d apollo_lms < backup.sql
+docker exec -i DSBA-postgres psql -U DSBA -d DSBA_lms < backup.sql
 
 # Periodic backup (cron)
-0 2 * * * docker exec apollo-postgres pg_dump -U apollo apollo_lms > /backups/$(date +\%Y\%m\%d).sql
+0 2 * * * docker exec DSBA-postgres pg_dump -U DSBA DSBA_lms > /backups/$(date +\%Y\%m\%d).sql
 ```
 
 ## Monitoring & Observability
@@ -433,13 +433,13 @@ async def ai_grade_bulk_exam(request: BulkGradeRequest, background_tasks: Backgr
 #### Backend Won't Start
 ```bash
 # Check database connectivity
-docker exec -it apollo-postgres psql -U apollo -d apollo_lms -c "SELECT 1"
+docker exec -it DSBA-postgres psql -U DSBA -d DSBA_lms -c "SELECT 1"
 
 # Check Redis connectivity
-docker exec -it apollo-redis redis-cli ping
+docker exec -it DSBA-redis redis-cli ping
 
 # View backend logs
-docker logs apollo-backend
+docker logs DSBA-backend
 ```
 
 #### Frontend Build Fails
@@ -455,8 +455,8 @@ npm run build
 #### Database Connection Issues
 ```bash
 # Test database connection
-docker run --rm --network apollo_lms_default postgres:15 psql \
-    -h postgres -U apollo -d apollo_lms -c "SELECT version()"
+docker run --rm --network DSBA_lms_default postgres:15 psql \
+    -h postgres -U DSBA -d DSBA_lms -c "SELECT version()"
 
 # Reset database if needed
 make db-reset
@@ -466,13 +466,13 @@ make seed
 #### AI Service Unavailable
 ```bash
 # Check AI service logs
-docker logs apollo-ai-service
+docker logs DSBA-ai-service
 
 # Test AI endpoint
 curl http://localhost:8001/health
 
 # Verify OpenAI API key
-docker exec -it apollo-ai-service env | grep OPENAI
+docker exec -it DSBA-ai-service env | grep OPENAI
 ```
 
 ### Performance Issues
@@ -513,12 +513,12 @@ curl -w "@curl-format.txt" http://localhost:8000/health
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: apollo-backend-hpa
+  name: DSBA-backend-hpa
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: apollo-backend
+    name: DSBA-backend
   minReplicas: 2
   maxReplicas: 10
   metrics:
@@ -575,13 +575,13 @@ For issues or questions:
 # Automatic backup script
 #!/bin/bash
 DATE=$(date +%Y%m%d_%H%M)
-BACKUP_NAME="apollo_backup_$DATE"
+BACKUP_NAME="DSBA_backup_$DATE"
 
 # Database backup
-docker exec apollo-postgres pg_dump -U apollo -Fc apollo_lms > /backups/$BACKUP_NAME.sql
+docker exec DSBA-postgres pg_dump -U DSBA -Fc DSBA_lms > /backups/$BACKUP_NAME.sql
 
 # Redis backup (if needed)
-docker exec apollo-redis redis-cli BGSAVE
+docker exec DSBA-redis redis-cli BGSAVE
 
 # File storage backup
 tar -czf /backups/$BACKUP_NAME.tar.gz /storage

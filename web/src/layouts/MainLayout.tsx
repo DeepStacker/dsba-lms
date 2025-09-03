@@ -52,7 +52,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <AcademicCapIcon className="h-8 w-8 text-blue-600" />
-                <span className="text-xl font-bold text-gray-900">Apollo LMS</span>
+                <span className="text-xl font-bold text-gray-900">DSBA LMS</span>
               </div>
               <button onClick={() => setSidebarOpen(false)}>
                 <XMarkIcon className="h-6 w-6 text-gray-400" />
@@ -81,7 +81,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <div className="flex items-center h-16 flex-shrink-0 px-4 bg-white border-b border-gray-200">
               <AcademicCapIcon className="h-8 w-8 text-blue-600" />
               <div className="ml-3">
-                <span className="text-xl font-bold text-gray-900">Apollo LMS</span>
+                <span className="text-xl font-bold text-gray-900">DSBA LMS</span>
                 <p className="text-xs text-gray-500">
                   {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'} Panel
                 </p>
