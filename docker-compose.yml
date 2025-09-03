@@ -9,7 +9,6 @@ services:
       POSTGRES_PASSWORD: apollo
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
     networks:
@@ -32,7 +31,6 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:apollo@postgres/apollo_lms
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - AI_SERVICE_URL=http://ai-service:8001
     ports:
       - "8000:8000"
