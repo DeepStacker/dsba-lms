@@ -313,9 +313,30 @@ class ReportsService:
     async def get_exam_co_achievements(self, exam_id: int) -> List[Dict[str, Any]]:
         """Calculate CO achievements for exam"""
         try:
+            # Find all COs referenced by questions in this exam
+            from sqlalchemy import text
+            q = text(
+                "SELECT DISTINCT c.id, c.code, c.title, c.course_id "
+                "FROM cos c "
+                "JOIN questions q ON q.co_id = c.id "
+                "JOIN exam_questions eq ON eq.question_id = q.id "
+                "WHERE eq.exam_id = :exam_id"
+            )
+            result = await self.db.execute(q, {"exam_id": exam_id})
+            cos = result.fetchall()
+
             co_reports = []
-            # Get all CO-attainment data for the exam
-            # Implementation will be completed in calculations module
+            for co_row in cos:
+                co_id = co_row.id
+                attainment = await calculate_co_attainment(self.db, co_id, exam_ids=[exam_id])
+                co_reports.append({
+                    "co_id": co_id,
+                    "co_code": co_row.code,
+                    "co_title": co_row.title,
+                    "course_id": co_row.course_id,
+                    "attainment_percent": round(attainment, 2)
+                })
+
             return co_reports
         except Exception as e:
             raise Exception(f"Failed to calculate CO achievements: {str(e)}")
@@ -323,8 +344,31 @@ class ReportsService:
     async def get_exam_po_mapping(self, exam_id: int) -> List[Dict[str, Any]]:
         """Get PO mapping for exam"""
         try:
+            # Get all POs that are linked via COs included in this exam
+            from sqlalchemy import text
+            q = text(
+                "SELECT DISTINCT p.id, p.code, p.title "
+                "FROM pos p "
+                "JOIN co_po_maps m ON m.po_id = p.id "
+                "JOIN cos c ON c.id = m.co_id "
+                "JOIN questions q ON q.co_id = c.id "
+                "JOIN exam_questions eq ON eq.question_id = q.id "
+                "WHERE eq.exam_id = :exam_id"
+            )
+            result = await self.db.execute(q, {"exam_id": exam_id})
+            pos = result.fetchall()
+
             po_reports = []
-            # Implementation will be completed in calculations module
+            for po_row in pos:
+                po_id = po_row.id
+                attainment = await calculate_po_attainment(self.db, po_id, exam_ids=[exam_id])
+                po_reports.append({
+                    "po_id": po_id,
+                    "po_code": po_row.code,
+                    "po_title": po_row.title,
+                    "attainment_percent": round(attainment, 2)
+                })
+
             return po_reports
         except Exception as e:
             raise Exception(f"Failed to calculate PO mapping: {str(e)}")
@@ -367,15 +411,62 @@ class ReportsService:
 
     async def export_report_as_pdf(self, report_type: str, report_data: Dict[str, Any]) -> bytes:
         """Export report as PDF"""
-        # Placeholder for PDF generation
-        # Will use reportlab or similar library
-        return b"PDF data"
+        # Simple PDF generator using reportlab
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+        import io
+
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
+
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(40, height - 40, f"{report_type.upper()} Report")
+
+        c.setFont("Helvetica", 10)
+        y = height - 80
+        for k, v in report_data.items():
+            line = f"{k}: {v}"
+            c.drawString(40, y, line[:120])
+            y -= 14
+            if y < 60:
+                c.showPage()
+                c.setFont("Helvetica", 10)
+                y = height - 40
+
+        c.showPage()
+        c.save()
+        buffer.seek(0)
+        return buffer.read()
 
     async def export_report_as_excel(self, report_type: str, report_data: Dict[str, Any]) -> bytes:
         """Export report as Excel"""
-        # Placeholder for Excel generation
-        # Will use openpyxl or similar
-        return b"Excel data"
+        import io
+        import pandas as pd
+
+        buffer = io.BytesIO()
+        # If report_data contains lists (like student_reports), create multiple sheets
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            # Top-level simple key-values
+            kv = {k: v for k, v in report_data.items() if not isinstance(v, list)}
+            if kv:
+                df_kv = pd.DataFrame(list(kv.items()), columns=['key', 'value'])
+                df_kv.to_excel(writer, sheet_name='summary', index=False)
+
+            # Other list sections
+            for key, value in report_data.items():
+                if isinstance(value, list) and value:
+                    try:
+                        df = pd.DataFrame(value)
+                        sheet_name = key[:31]
+                        df.to_excel(writer, sheet_name=sheet_name, index=False)
+                    except Exception:
+                        # Fallback: stringify
+                        df = pd.DataFrame([{key: str(value)}])
+                        df.to_excel(writer, sheet_name=key[:31], index=False)
+
+        buffer.seek(0)
+        return buffer.read()
 
 
 def get_score_distribution(scores: List[float]) -> Dict[str, int]:

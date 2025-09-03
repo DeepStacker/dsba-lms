@@ -191,16 +191,24 @@ class AuditService:
 # Utility functions for easy access
 async def log_audit_event(db: AsyncSession, actor_id: int, entity_type: str,
                          entity_id: int, action: str, before_data=None,
-                         after_data=None, reason=None):
-    """Convenience function to log an audit event"""
+                         after_data=None, reason=None, **kwargs):
+    """Convenience function to log an audit event.
+
+    Accepts either before_data/after_data or before_json/after_json for
+    compatibility with existing call sites.
+    """
+    # Prefer explicit names; fall back to legacy ones if provided
+    before_json = before_data if before_data is not None else kwargs.get("before_json")
+    after_json = after_data if after_data is not None else kwargs.get("after_json")
+
     return await create_audit_log(
         db=db,
         actor_id=actor_id,
         entity_type=entity_type,
         entity_id=entity_id,
         action=action,
-        before_json=before_data,
-        after_json=after_data,
+        before_json=before_json,
+        after_json=after_json,
         reason=reason
     )
 

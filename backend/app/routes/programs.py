@@ -174,7 +174,13 @@ async def create_co_po_map(
     po_result = await db.execute(select(PO).where(PO.id == co_po_map.po_id))
     if not po_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="PO not found")
-    
+    # Validate weight: sum of weights for this CO must not exceed 1.0
+    existing_result = await db.execute(select(CO_PO_Map).where(CO_PO_Map.co_id == co_po_map.co_id))
+    existing_maps = existing_result.scalars().all()
+    current_total = sum(m.weight for m in existing_maps) if existing_maps else 0.0
+    if current_total + float(co_po_map.weight) > 1.000001:
+        raise HTTPException(status_code=400, detail=f"Total weight for CO {co_po_map.co_id} would exceed 1.0 (current {current_total})")
+
     db_map = CO_PO_Map(**co_po_map.dict())
     db.add(db_map)
     await db.commit()

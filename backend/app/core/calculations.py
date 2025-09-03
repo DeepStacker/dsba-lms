@@ -51,23 +51,25 @@ async def calculate_sgpa(db: AsyncSession, student_id: int, semester: Optional[i
     # Get courses and assessments for the semester
     # This is a simplified implementation - adjust based on actual schema
 
-    query = """
-        SELECT c.id, c.credits, e.raw_score, e.max_score
-        FROM courses c
-        JOIN internal_scores e ON e.student_id = $1 AND e.course_id = c.id
-        JOIN internal_components ic ON e.component_id = ic.id
-        WHERE 1=1
-    """
+    from sqlalchemy import text
 
-    params = [student_id]
+    query = text(
+        "SELECT c.id as course_id, c.credits, e.raw_score, e.max_score "
+        "FROM courses c "
+        "JOIN internal_scores e ON e.student_id = :student_id AND e.course_id = c.id "
+        "JOIN internal_components ic ON e.component_id = ic.id "
+        "WHERE 1=1"
+    )
+
+    params = {"student_id": student_id}
 
     if semester:
-        query += " AND ic.name LIKE $%d" % (len(params) + 1)
-        params.append(f"%semester {semester}%")
+        query = text(str(query) + " AND ic.name LIKE :semester")
+        params["semester"] = f"%semester {semester}%"
 
     if academic_year:
-        query += " AND ic.name LIKE $%d" % (len(params) + 1)
-        params.append(f"%{academic_year}%")
+        query = text(str(query) + " AND ic.name LIKE :academic_year")
+        params["academic_year"] = f"%{academic_year}%"
 
     result = await db.execute(query, params)
     scores = result.fetchall()
@@ -109,16 +111,15 @@ async def calculate_cgpa(db: AsyncSession, student_id: int, semester: Optional[i
 
     # Calculate multiple SGPA scores and aggregate
 
-    semesters_query = """
-        SELECT DISTINCT ic.name
-        FROM internal_components ic
-        JOIN internal_scores iss ON iss.component_id = ic.id
-        WHERE iss.student_id = $1
-        AND ic.name LIKE '%semester%'
-        ORDER BY ic.name
-    """
+    from sqlalchemy import text
 
-    result = await db.execute(semesters_query, (student_id,))
+    semesters_query = text(
+        "SELECT DISTINCT ic.name FROM internal_components ic "
+        "JOIN internal_scores iss ON iss.component_id = ic.id "
+        "WHERE iss.student_id = :student_id AND ic.name LIKE '%semester%' ORDER BY ic.name"
+    )
+
+    result = await db.execute(semesters_query, {"student_id": student_id})
     semester_names = result.fetchall()
 
     total_credits = 0
@@ -151,24 +152,16 @@ async def calculate_co_attainment(db: AsyncSession, co_id: int, exam_ids: Option
     """Calculate CO (Course Outcome) attainment"""
 
     # Get all questions mapped to this CO
-    query = """
-        SELECT DISTINCT q.id, q.max_marks
-        FROM questions q
-        WHERE q.co_id = $1
-    """
+    from sqlalchemy import text
 
-    params = [co_id]
+    query = text("SELECT DISTINCT q.id, q.max_marks FROM questions q WHERE q.co_id = :co_id")
+    params = {"co_id": co_id}
 
     if exam_ids:
-        query += """
-            AND q.id IN (
-                SELECT eq.question_id
-                FROM exam_questions eq
-                WHERE eq.exam_id IN (%s)
-            )
-        """ % ','.join('$' + str(len(params) + 1 + i) for i in range(len(exam_ids)))
-
-        params.extend(exam_ids)
+        placeholders = ",".join([f":e{i}" for i in range(len(exam_ids))])
+        query = text(str(query) + f" AND q.id IN (SELECT eq.question_id FROM exam_questions eq WHERE eq.exam_id IN ({placeholders}))")
+        for i, eid in enumerate(exam_ids):
+            params[f"e{i}"] = eid
 
     result = await db.execute(query, params)
     co_questions = result.fetchall()
@@ -193,23 +186,16 @@ async def calculate_question_co_attainment(db: AsyncSession, question_id: int,
     """Calculate CO attainment for a specific question"""
 
     # Get all responses for this question
-    query = """
-        SELECT r.ai_score, r.teacher_score, r.final_score, q.max_marks
-        FROM responses r
-        JOIN questions q ON q.id = r.question_id
-        WHERE r.question_id = $1
-    """
+    from sqlalchemy import text
 
-    params = [question_id]
+    query = text("SELECT r.ai_score, r.teacher_score, r.final_score, q.max_marks FROM responses r JOIN questions q ON q.id = r.question_id WHERE r.question_id = :question_id")
+    params = {"question_id": question_id}
 
     if exam_ids:
-        query += """
-            AND r.attempt_id IN (
-                SELECT a.id FROM attempts a WHERE a.exam_id IN (%s)
-            )
-        """ % ','.join('$' + str(len(params) + 1 + i) for i in range(len(exam_ids)))
-
-        params.extend(exam_ids)
+        placeholders = ",".join([f":a{i}" for i in range(len(exam_ids))])
+        query = text(str(query) + f" AND r.attempt_id IN (SELECT a.id FROM attempts a WHERE a.exam_id IN ({placeholders}))")
+        for i, eid in enumerate(exam_ids):
+            params[f"a{i}"] = eid
 
     result = await db.execute(query, params)
     responses = result.fetchall()
@@ -233,13 +219,10 @@ async def calculate_po_attainment(db: AsyncSession, po_id: int, exam_ids: Option
     """Calculate PO (Program Outcome) attainment"""
 
     # Get all COs mapped to this PO and their weights
-    query = """
-        SELECT cpm.co_id, cpm.weight
-        FROM co_po_maps cpm
-        WHERE cpm.po_id = $1
-    """
+    from sqlalchemy import text
 
-    result = await db.execute(query, (po_id,))
+    query = text("SELECT cpm.co_id, cpm.weight FROM co_po_maps cpm WHERE cpm.po_id = :po_id")
+    result = await db.execute(query, {"po_id": po_id})
     co_mappings = result.fetchall()
 
     if not co_mappings:
@@ -260,18 +243,31 @@ def get_score_distribution(scores: List[float]) -> Dict[str, int]:
     """Get score distribution for analytics"""
     if not scores:
         return {}
-
+    # Create 10 buckets inclusive of max score in the last bucket.
     min_score = min(scores)
     max_score = max(scores)
-    range_size = (max_score - min_score) / 10 if max_score > min_score else 1
+    # Avoid division by zero when all scores are equal.
+    if max_score == min_score:
+        return {f"{min_score:.1f}": len(scores)}
 
-    distribution = {}
-    for i in range(10):
-        bucket_min = min_score + i * range_size
-        bucket_max = min_score + (i + 1) * range_size
-        count = sum(1 for s in scores if bucket_min <= s < bucket_max)
+    num_buckets = 10
+    range_size = (max_score - min_score) / num_buckets
+
+    # Use bucket edges and include max_score in the last bucket
+    buckets = [min_score + i * range_size for i in range(num_buckets + 1)]
+
+    distribution: Dict[str, int] = {}
+    for i in range(num_buckets):
+        bmin = buckets[i]
+        bmax = buckets[i + 1]
+        # include the upper edge for the last bucket
+        if i == num_buckets - 1:
+            count = sum(1 for s in scores if bmin <= s <= bmax)
+        else:
+            count = sum(1 for s in scores if bmin <= s < bmax)
+
         if count > 0:
-            bucket_name = f"{bucket_min:.1f}"
+            bucket_name = f"{bmin:.1f}"
             distribution[bucket_name] = count
 
     return distribution
@@ -288,13 +284,12 @@ async def calculate_exam_statistics(db: AsyncSession, exam_id: int) -> Dict[str,
         return {"error": "Exam not found"}
 
     # Get attempts and responses
-    attempts_query = """
-        SELECT COUNT(*), AVG(CASE WHEN final_score THEN 1 ELSE 0 END) as completion_rate
-        FROM attempts
-        WHERE exam_id = $1
-    """
+    from sqlalchemy import text
 
-    attempt_stats = await db.execute(attempts_query, (exam_id,))
+    attempts_query = text(
+        "SELECT COUNT(*) as cnt, AVG(CASE WHEN final_score THEN 1 ELSE 0 END) as completion_rate FROM attempts WHERE exam_id = :exam_id"
+    )
+    attempt_stats = await db.execute(attempts_query, {"exam_id": exam_id})
     attempts_data = attempt_stats.fetchone()
 
     # Get response statistics
@@ -309,7 +304,7 @@ async def calculate_exam_statistics(db: AsyncSession, exam_id: int) -> Dict[str,
         WHERE a.exam_id = $1 AND r.final_score IS NOT NULL
     """
 
-    response_stats = await db.execute(responses_query, (exam_id,))
+    response_stats = await db.execute(text(responses_query), {"exam_id": exam_id})
     response_data = response_stats.fetchone()
 
     # Get proctoring events
@@ -321,7 +316,7 @@ async def calculate_exam_statistics(db: AsyncSession, exam_id: int) -> Dict[str,
         GROUP BY event_type
     """
 
-    proctor_stats = await db.execute(proctor_query, (exam_id,))
+    proctor_stats = await db.execute(text(proctor_query), {"exam_id": exam_id})
     proctor_data = dict(proctor_stats.fetchall())
 
     return {

@@ -186,6 +186,21 @@ async def teacher_grade_override(
         "ai_score": response.ai_score
     }
 
+    # Check lock windows - if a lock window is active for this scope, only admin can override
+    from ..models.models import LockWindow, LockStatus
+    from sqlalchemy import select
+    now = datetime.utcnow()
+    lock_query = select(LockWindow).where(
+        LockWindow.scope == "grades",
+        LockWindow.starts_at <= now,
+        LockWindow.ends_at >= now,
+        LockWindow.status == LockStatus.ACTIVE
+    )
+    lock_res = await db.execute(lock_query)
+    active_lock = lock_res.scalar_one_or_none()
+    if active_lock and current_user.role.value != "admin":
+        raise HTTPException(status_code=403, detail="Grades are locked; only admin may perform overrides at this time")
+
     # Update response
     response.teacher_score = teacher_score
     response.final_score = teacher_score
@@ -276,32 +291,25 @@ async def get_grading_progress(
     """Get grading progress and statistics for an exam"""
 
     # Total responses
-    total_result = await db.execute("""
-        SELECT COUNT(*)
-        FROM responses r
-        JOIN attempts a ON r.attempt_id = a.id
-        WHERE a.exam_id = $1
-    """, (exam_id,))
+    from sqlalchemy import text
+
+    total_result = await db.execute(text(
+        "SELECT COUNT(*) as cnt FROM responses r JOIN attempts a ON r.attempt_id = a.id WHERE a.exam_id = :exam_id"
+    ), {"exam_id": exam_id})
 
     # AI graded responses
-    ai_graded_result = await db.execute("""
-        SELECT COUNT(*)
-        FROM responses r
-        JOIN attempts a ON r.attempt_id = a.id
-        WHERE a.exam_id = $1 AND r.ai_score IS NOT NULL
-    """, (exam_id,))
+    ai_graded_result = await db.execute(text(
+        "SELECT COUNT(*) as cnt FROM responses r JOIN attempts a ON r.attempt_id = a.id WHERE a.exam_id = :exam_id AND r.ai_score IS NOT NULL"
+    ), {"exam_id": exam_id})
 
     # Manually graded responses
-    manual_graded_result = await db.execute("""
-        SELECT COUNT(*)
-        FROM responses r
-        JOIN attempts a ON r.attempt_id = a.id
-        WHERE a.exam_id = $1 AND r.teacher_score IS NOT NULL
-    """, (exam_id,))
+    manual_graded_result = await db.execute(text(
+        "SELECT COUNT(*) as cnt FROM responses r JOIN attempts a ON r.attempt_id = a.id WHERE a.exam_id = :exam_id AND r.teacher_score IS NOT NULL"
+    ), {"exam_id": exam_id})
 
-    total = total_result.scalar()
-    ai_graded = ai_graded_result.scalar()
-    manual_graded = manual_graded_result.scalar()
+    total = total_result.scalar() or 0
+    ai_graded = ai_graded_result.scalar() or 0
+    manual_graded = manual_graded_result.scalar() or 0
 
     return {
         "exam_id": exam_id,

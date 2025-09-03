@@ -4,12 +4,13 @@ import os
 
 class Settings(BaseSettings):
     # Database settings from environment
-    database_url: str = "postgresql+asyncpg://postgres:DSBA@postgres/DSBA_lms"
+    # Default to a local dev-friendly postgres config expected by tests
+    database_url: str = "postgresql+asyncpg://DSBA:DSBA@localhost/DSBA"
 
     # Alternative database settings (used when database_url is not set)
-    postgres_host: str = "postgres"
-    postgres_db: str = "DSBA_lms"
-    postgres_user: str = "postgres"
+    postgres_host: str = "localhost"
+    postgres_db: str = "DSBA"
+    postgres_user: str = "DSBA"
     postgres_password: str = "DSBA"
 
     # Redis
@@ -35,6 +36,13 @@ class Settings(BaseSettings):
 
     # AI Service
     ai_service_url: str = "http://ai-service:8001"
+    # Internal token used to authenticate backend -> ai-service calls
+    ai_service_token: str = os.environ.get("AI_SERVICE_TOKEN", "internal_token_change_me")
+
+    # Feature flags
+    feature_ai: bool = True
+    feature_analytics: bool = True
+    feature_telemetry: bool = True
 
     # Security - Trusted hosts (optional)
     allowed_hosts: List[str] = ["*"]
@@ -67,12 +75,23 @@ class Settings(BaseSettings):
 
     @property
     def sync_database_url(self) -> str:
+        # Normalize and return a sync (psycopg2-style) DB URL
         if self.database_url:
+            if self.database_url.startswith("postgresql+asyncpg://"):
+                return self.database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
             return self.database_url
+
         return f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}/{self.postgres_db}"
 
     @property
     def async_database_url(self) -> str:
+        # Ensure asyncpg prefix is present
+        if self.database_url:
+            if self.database_url.startswith("postgresql+asyncpg://"):
+                return self.database_url
+            if self.database_url.startswith("postgresql://"):
+                return self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
         return self.sync_database_url.replace("postgresql://", "postgresql+asyncpg://")
 
 settings = Settings()

@@ -19,9 +19,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Auth dependency
+import os
+
+# Auth dependency - read expected token from environment
+def _get_expected_token() -> str:
+    # Use a single canonical env var for internal token
+    return os.environ.get("AI_SERVICE_TOKEN", os.environ.get("AI_SERVICE_INTERNAL_TOKEN", "internal_token_change_me"))
+
+
 async def verify_token(x_internal_auth: Optional[str] = Header(None)):
-    expected_token = "internal_token_change_me"  # In production, get from config
+    expected_token = _get_expected_token()
     if not x_internal_auth or x_internal_auth != expected_token:
         raise HTTPException(status_code=401, detail="Invalid internal auth token")
     return True
@@ -81,7 +88,7 @@ async def grade_descriptive_answer(
             answer=request.answer,
             model_answer=request.model_answer,
             rubric=request.rubric_json,
-            strictness=request.strictness
+            strictness=float(request.strictness or 0.5)
         )
         return result
     except Exception as e:
