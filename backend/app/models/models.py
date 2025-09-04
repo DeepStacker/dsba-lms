@@ -71,6 +71,7 @@ class PO(Base):
     program: Mapped["Program"] = relationship("Program", back_populates="pos")
     co_po_maps: Mapped[List["CO_PO_Map"]] = relationship("CO_PO_Map", back_populates="po")
 
+
 class Course(Base):
     __tablename__ = "courses"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -85,6 +86,7 @@ class Course(Base):
     cos: Mapped[List["CO"]] = relationship("CO", back_populates="course")
     class_sections: Mapped[List["ClassSection"]] = relationship("ClassSection", back_populates="course")
     internal_components: Mapped[List["InternalComponent"]] = relationship("InternalComponent", back_populates="course")
+
 
 class CO(Base):
     __tablename__ = "cos"
@@ -121,10 +123,14 @@ class ClassSection(Base):
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    # New field for coordinator
+    coordinator_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"))
+
 
     course: Mapped["Course"] = relationship("Course", back_populates="class_sections")
     enrollments: Mapped[List["Enrollment"]] = relationship("Enrollment", back_populates="class_section")
     exams: Mapped[List["Exam"]] = relationship("Exam", back_populates="class_section")
+    coordinator: Mapped[Optional["User"]] = relationship("User", foreign_keys=[coordinator_id])
 
 class User(Base):
     __tablename__ = "users"
@@ -138,20 +144,29 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_login: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True))
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    meta_json: Mapped[Optional[dict]] = mapped_column(JSON)
+    password_reset_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    password_reset_expires_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    meta_json: Mapped[Optional[dict]] = mapped_column(JSON )
     created_by: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"))
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    # New fields
+    first_login: Mapped[bool] = mapped_column(Boolean, default=True)
+    department: Mapped[Optional[str]] = mapped_column(String(255))
+
 
     # Self-referential relationship for creator
     creator: Mapped[Optional["User"]] = relationship("User", remote_side=[id])
 
+
     enrollments: Mapped[List["Enrollment"]] = relationship("Enrollment", back_populates="student")
     questions: Mapped[List["Question"]] = relationship("Question", back_populates="creator")
-    attempts: Mapped[List["Attempt"]] = relationship("Attempt", back_populates="student")
+    attempts: Mapped[List["Attempt"]] = relationship("Attempt", back_populates="attempts")
     grade_upload_batches: Mapped[List["GradeUploadBatch"]] = relationship("GradeUploadBatch", back_populates="uploader")
     internal_scores: Mapped[List["InternalScore"]] = relationship("InternalScore", back_populates="student")
     audit_logs: Mapped[List["AuditLog"]] = relationship("AuditLog", back_populates="actor")
+    notifications: Mapped[List["Notification"]] = relationship("Notification", back_populates="recipient")
+
 
 class Enrollment(Base):
     __tablename__ = "enrollments"
@@ -259,7 +274,7 @@ class ProctorLog(Base):
     event_type: Mapped[ProctorEventType] = mapped_column(Enum(ProctorEventType), nullable=False)
     payload: Mapped[Optional[dict]] = mapped_column(JSON)
 
-    attempt: Mapped["Attempt"] = relationship("Attempt", back_populates="proctor_logs")
+    attempt: Mapped["Attempt"] = relationship("Attempt", back_populates="proctor_logs") 
 
 class GradeUploadBatch(Base):
     __tablename__ = "grade_upload_batches"
@@ -322,3 +337,15 @@ class LockWindow(Base):
     policy_json: Mapped[Optional[dict]] = mapped_column(JSON)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    recipient_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    read: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    recipient: Mapped["User"] = relationship("User", back_populates="notifications")

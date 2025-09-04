@@ -1,6 +1,7 @@
 version: '3.8'
 services:
   # PostgreSQL Database
+  
   postgres:
     image: postgres:15-alpine
     environment:
@@ -90,35 +91,38 @@ services:
     networks:
       - lms_network
 
-  # Python worker for background tasks (commented out - missing worker module)
-  # worker:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: Dockerfile
-  #   environment:
-  #     - DATABASE_URL=postgresql+asyncpg://lmsadmin:DSBA@postgres/DSBA_lms
-  #     - REDIS_URL=redis://redis:6379
-  #     - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #   volumes:
-  #     - ./backend:/app
-  #   networks:
-  #     - lms_network
-  #   command: celery -A app.worker.celery_app worker --loglevel=info
+  # Python worker for background tasks
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:DSBA@postgres/DSBA_lms
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - CELERY_BROKER_URL=amqp://admin:admin123@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=rpc://admin:admin123@rabbitmq:5672//
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    volumes:
+      - ./backend:/app
+    networks:
+      - lms_network
+    command: celery -A app.worker.celery_app worker --loglevel=info
 
-  # Message queue for background tasks (commented out - worker commented out)
-  # rabbitmq:
-  #   image: rabbitmq:3-management-alpine
-  #   environment:
-  #     RABBITMQ_DEFAULT_USER: admin
-  #     RABBITMQ_DEFAULT_PASS: admin123
-  #   ports:
-  #     - "5672:5672"
-  #     - "15672:15672"
-  #   networks:
-  #     - lms_network
+  # Message queue for background tasks
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - lms_network
 
 volumes:
   postgres_data:

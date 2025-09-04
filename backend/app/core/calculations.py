@@ -5,9 +5,10 @@ Calculation utilities for SGPA/CGPA and CO/PO attainment analysis
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import Dict, List, Any, Optional
-from ..models.models import User, Course, Exam, Attempt, Response, CO, PO, InternalScore, InternalComponent
+from ..models.models import User, Course, Exam, Attempt, Response, CO, PO, InternalScore, InternalComponent, Question, CO_PO_Map
 from decimal import Decimal
 import math
+from sqlalchemy import text # Ensure text is imported for raw SQL queries
 
 
 # Default grade bands - can be made configurable
@@ -51,8 +52,6 @@ async def calculate_sgpa(db: AsyncSession, student_id: int, semester: Optional[i
     # Get courses and assessments for the semester
     # This is a simplified implementation - adjust based on actual schema
 
-    from sqlalchemy import text
-
     query = text(
         "SELECT c.id as course_id, c.credits, e.raw_score, e.max_score "
         "FROM courses c "
@@ -64,11 +63,11 @@ async def calculate_sgpa(db: AsyncSession, student_id: int, semester: Optional[i
     params = {"student_id": student_id}
 
     if semester:
-        query = text(str(query) + " AND ic.name LIKE :semester")
+        query = text(str(query) + " AND ic.name LIKE :semester") # Assuming semester is part of component name
         params["semester"] = f"%semester {semester}%"
 
     if academic_year:
-        query = text(str(query) + " AND ic.name LIKE :academic_year")
+        query = text(str(query) + " AND ic.name LIKE :academic_year") # Assuming academic year is part of component name
         params["academic_year"] = f"%{academic_year}%"
 
     result = await db.execute(query, params)
@@ -93,12 +92,13 @@ async def calculate_sgpa(db: AsyncSession, student_id: int, semester: Optional[i
                 "grade_point": grade_point
             })
 
-    sgpa = weighted_gpa / total_credits if total_credits > 0 else 0
+    sgpa = weighted_gpa / Decimal(total_credits) if total_credits > 0 else 0
+    grade_points = weighted_gpa / Decimal(total_credits) if total_credits > 0 else 0
 
     return {
-        "sgpa": round(sgpa, 2),
+        "sgpa": round(float(sgpa), 2),
         "total_credits": total_credits,
-        "grade_points": round(weighted_gpa / total_credits if total_credits > 0 else 0, 2),
+        "grade_points": round(float(grade_points), 2),
         "course_grades": course_grades,
         "semester": semester,
         "academic_year": academic_year
@@ -110,9 +110,6 @@ async def calculate_cgpa(db: AsyncSession, student_id: int, semester: Optional[i
     """Calculate Cumulative Grade Point Average"""
 
     # Calculate multiple SGPA scores and aggregate
-
-    from sqlalchemy import text
-
     semesters_query = text(
         "SELECT DISTINCT ic.name FROM internal_components ic "
         "JOIN internal_scores iss ON iss.component_id = ic.id "
@@ -120,123 +117,112 @@ async def calculate_cgpa(db: AsyncSession, student_id: int, semester: Optional[i
     )
 
     result = await db.execute(semesters_query, {"student_id": student_id})
-    semester_names = result.fetchall()
+    semester_names = [row[0] for row in result.fetchall()] # Extract string names
 
-    total_credits = 0
-    total_weighted_gpa = 0
+    total_credits_cumulative = 0
+    total_weighted_gpa_cumulative = 0
     semesters_included = []
 
-    for semester_data in semester_names:
-        semester_match = semester_data.name.lower()
-        if "semester" in semester_match:
-            sem_num = int(''.join(filter(str.isdigit, semester_match)))
-            if semester and sem_num > semester:
+    for s_name in semester_names:
+        # Attempt to parse semester number (e.g., "Fall 2023 Semester 1")
+        sem_num_str = ''.join(filter(str.isdigit, s_name))
+        sem_num = int(sem_num_str) if sem_num_str else None
+
+        if sem_num is not None:
+            if semester and sem_num > semester: # Filter for 'up to semester'
                 continue
 
-            sgpa_result = await calculate_sgpa(db, student_id, semester=sem_num)
+            sgpa_result = await calculate_sgpa(db, student_id, semester=sem_num) # Pass numeric semester
             if sgpa_result["total_credits"] > 0:
-                total_weighted_gpa += sgpa_result["grade_points"] * sgpa_result["total_credits"]
-                total_credits += sgpa_result["total_credits"]
+                total_weighted_gpa_cumulative += Decimal(sgpa_result["grade_points"]) * sgpa_result["total_credits"]
+                total_credits_cumulative += sgpa_result["total_credits"]
                 semesters_included.append(sem_num)
 
-    cgpa = total_weighted_gpa / total_credits if total_credits > 0 else 0
+    cgpa = total_weighted_gpa_cumulative / Decimal(total_credits_cumulative) if total_credits_cumulative > 0 else 0
 
     return {
-        "cgpa": round(cgpa, 2),
-        "total_credits": total_credits,
-        "semesters_included": semesters_included
+        "cgpa": round(float(cgpa), 2),
+        "total_credits": total_credits_cumulative,
+        "semesters_included": sorted(list(set(semesters_included))) # Unique and sorted
     }
 
 
-async def calculate_co_attainment(db: AsyncSession, co_id: int, exam_ids: Optional[List[int]] = None) -> float:
-    """Calculate CO (Course Outcome) attainment"""
+async def calculate_co_attainment(db: AsyncSession, co_id: int, 
+                                   student_ids: Optional[List[int]] = None,
+                                   exam_ids: Optional[List[int]] = None) -> float:
+    """Calculate CO (Course Outcome) attainment for specific students and/or exams"""
 
-    # Get all questions mapped to this CO
-    from sqlalchemy import text
+    # First, find all questions linked to this CO
+    question_query = select(Question.id, Question.max_marks).where(Question.co_id == co_id)
+    questions_for_co_result = await db.execute(question_query)
+    questions_for_co = questions_for_co_result.fetchall()
 
-    query = text("SELECT DISTINCT q.id, q.max_marks FROM questions q WHERE q.co_id = :co_id")
-    params = {"co_id": co_id}
-
-    if exam_ids:
-        placeholders = ",".join([f":e{i}" for i in range(len(exam_ids))])
-        query = text(str(query) + f" AND q.id IN (SELECT eq.question_id FROM exam_questions eq WHERE eq.exam_id IN ({placeholders}))")
-        for i, eid in enumerate(exam_ids):
-            params[f"e{i}"] = eid
-
-    result = await db.execute(query, params)
-    co_questions = result.fetchall()
-
-    if not co_questions:
+    if not questions_for_co:
         return 0.0
 
-    total_attainment = 0
-    question_count = 0
+    total_attainment_sum = 0.0
+    total_max_marks_sum = 0.0
+    
+    # Iterate through each question linked to the CO
+    for q_id, q_max_marks in questions_for_co:
+        # Build base query for responses to this question
+        # We need to join through attempts to filter by student_ids or exam_ids
+        response_query = select(Response.final_score).join(Attempt, Response.attempt_id == Attempt.id).where(Response.question_id == q_id)
+        
+        # Filter by student_ids if provided
+        if student_ids:
+            response_query = response_query.where(Attempt.student_id.in_(student_ids))
 
-    for question_id, max_marks in co_questions:
-        # Calculate attainment for this question
-        attainment = await calculate_question_co_attainment(db, question_id, exam_ids)
-        total_attainment += attainment
-        question_count += 1
+        # Filter by exam_ids if provided
+        if exam_ids:
+            response_query = response_query.where(Attempt.exam_id.in_(exam_ids))
+        
+        responses_result = await db.execute(response_query)
+        responses = responses_result.scalars().all()
 
-    return total_attainment / question_count if question_count > 0 else 0.0
+        if responses:
+            student_scores_for_question = [score for score in responses if score is not None]
+            if student_scores_for_question:
+                total_attainment_sum += sum(student_scores_for_question)
+                # Max possible score for this question across all relevant students
+                total_max_marks_sum += (q_max_marks if q_max_marks is not None else 0) * len(student_scores_for_question)
 
 
-async def calculate_question_co_attainment(db: AsyncSession, question_id: int,
-                                          exam_ids: Optional[List[int]] = None) -> float:
-    """Calculate CO attainment for a specific question"""
-
-    # Get all responses for this question
-    from sqlalchemy import text
-
-    query = text("SELECT r.ai_score, r.teacher_score, r.final_score, q.max_marks FROM responses r JOIN questions q ON q.id = r.question_id WHERE r.question_id = :question_id")
-    params = {"question_id": question_id}
-
-    if exam_ids:
-        placeholders = ",".join([f":a{i}" for i in range(len(exam_ids))])
-        query = text(str(query) + f" AND r.attempt_id IN (SELECT a.id FROM attempts a WHERE a.exam_id IN ({placeholders}))")
-        for i, eid in enumerate(exam_ids):
-            params[f"a{i}"] = eid
-
-    result = await db.execute(query, params)
-    responses = result.fetchall()
-
-    if not responses:
+    if total_max_marks_sum == 0.0:
         return 0.0
 
-    total_score = 0
-    max_possible = 0
-
-    for ai_score, teacher_score, final_score, max_marks in responses:
-        score = final_score or teacher_score or ai_score or 0
-        total_score += score
-        max_possible += max_marks
-
-    attainment = (total_score / max_possible) * 100 if max_possible > 0 else 0
-    return attainment
+    attainment_percentage = (total_attainment_sum / total_max_marks_sum) * 100
+    return attainment_percentage
 
 
-async def calculate_po_attainment(db: AsyncSession, po_id: int, exam_ids: Optional[List[int]] = None) -> float:
-    """Calculate PO (Program Outcome) attainment"""
+async def calculate_po_attainment(db: AsyncSession, po_id: int, 
+                                  student_ids: Optional[List[int]] = None,
+                                  exam_ids: Optional[List[int]] = None) -> float:
+    """Calculate PO (Program Outcome) attainment using weighted projection from COs for specific students and/or exams"""
 
     # Get all COs mapped to this PO and their weights
-    from sqlalchemy import text
-
-    query = text("SELECT cpm.co_id, cpm.weight FROM co_po_maps cpm WHERE cpm.po_id = :po_id")
-    result = await db.execute(query, {"po_id": po_id})
-    co_mappings = result.fetchall()
+    co_po_maps_result = await db.execute(
+        select(CO_PO_Map.co_id, CO_PO_Map.weight)
+        .where(CO_PO_Map.po_id == po_id)
+    )
+    co_mappings = co_po_maps_result.fetchall()
 
     if not co_mappings:
         return 0.0
 
-    total_attainment = 0
-    total_weight = 0
+    weighted_co_attainment_sum = 0.0
+    total_weight_sum = 0.0
 
     for co_id, weight in co_mappings:
-        co_attainment = await calculate_co_attainment(db, co_id, exam_ids)
-        total_attainment += co_attainment * weight
-        total_weight += weight
+        co_attainment_percentage = await calculate_co_attainment(db, co_id, student_ids=student_ids, exam_ids=exam_ids)
+        weighted_co_attainment_sum += co_attainment_percentage * (weight if weight is not None else 0)
+        total_weight_sum += (weight if weight is not None else 0)
 
-    return total_attainment / total_weight if total_weight > 0 else 0.0
+    if total_weight_sum == 0.0:
+        return 0.0
+
+    po_attainment_percentage = weighted_co_attainment_sum / total_weight_sum
+    return po_attainment_percentage
 
 
 def get_score_distribution(scores: List[float]) -> Dict[str, int]:
@@ -284,48 +270,46 @@ async def calculate_exam_statistics(db: AsyncSession, exam_id: int) -> Dict[str,
         return {"error": "Exam not found"}
 
     # Get attempts and responses
-    from sqlalchemy import text
-
     attempts_query = text(
-        "SELECT COUNT(*) as cnt, AVG(CASE WHEN final_score THEN 1 ELSE 0 END) as completion_rate FROM attempts WHERE exam_id = :exam_id"
+        "SELECT COUNT(*) as cnt, AVG(CASE WHEN submitted_at IS NOT NULL THEN 1.0 ELSE 0.0 END) as completion_rate FROM attempts WHERE exam_id = :exam_id"
     )
     attempt_stats = await db.execute(attempts_query, {"exam_id": exam_id})
     attempts_data = attempt_stats.fetchone()
 
     # Get response statistics
-    responses_query = """
+    responses_query = text("""
         SELECT
-            AVG(final_score) as avg_score,
-            MIN(final_score) as min_score,
-            MAX(final_score) as max_score,
-            COUNT(*) as total_responses
+            AVG(final_score::numeric) as avg_score,
+            MIN(final_score::numeric) as min_score,
+            MAX(final_score::numeric) as max_score,
+            COUNT(DISTINCT r.id) as total_responses
         FROM responses r
         JOIN attempts a ON a.id = r.attempt_id
-        WHERE a.exam_id = $1 AND r.final_score IS NOT NULL
-    """
+        WHERE a.exam_id = :exam_id AND r.final_score IS NOT NULL
+    """)
 
-    response_stats = await db.execute(text(responses_query), {"exam_id": exam_id})
-    response_data = response_stats.fetchone()
+    response_stats = await db.execute(responses_query, {"exam_id": exam_id})
+    response_data = response_stats.fetchone() # Use fetchone() for single row results
 
     # Get proctoring events
-    proctor_query = """
+    proctor_query = text("""
         SELECT event_type, COUNT(*) as count
-        FROM proctor_logs pl
-        JOIN attempts a ON a.id = pl.attempt_id
-        WHERE a.exam_id = $1
+        FROM public.proctor_logs pl
+        JOIN public.attempts a ON a.id = pl.attempt_id
+        WHERE a.exam_id = :exam_id
         GROUP BY event_type
-    """
+    """)
 
-    proctor_stats = await db.execute(text(proctor_query), {"exam_id": exam_id})
+    proctor_stats = await db.execute(proctor_query, {"exam_id": exam_id})
     proctor_data = dict(proctor_stats.fetchall())
 
     return {
         "exam_id": exam_id,
-        "total_attempts": attempts_data[0] if attempts_data[0] else 0,
-        "completion_rate": round(attempts_data[1] * 100, 2) if attempts_data[1] else 0,
-        "avg_score": round(response_data.avg_score, 2) if response_data.avg_score else 0,
-        "min_score": response_data.min_score if response_data.min_score else 0,
-        "max_score": response_data.max_score if response_data.max_score else 0,
-        "total_responses": response_data.total_responses if response_data.total_responses else 0,
+        "total_attempts": attempts_data[0] if attempts_data and attempts_data[0] is not None else 0,
+        "completion_rate": round(attempts_data[1] * 100, 2) if attempts_data and attempts_data[1] is not None else 0,
+        "avg_score": round(float(response_data.avg_score), 2) if response_data and response_data.avg_score is not None else 0,
+        "min_score": float(response_data.min_score) if response_data and response_data.min_score is not None else 0,
+        "max_score": float(response_data.max_score) if response_data and response_data.max_score is not None else 0,
+        "total_responses": response_data.total_responses if response_data and response_data.total_responses is not None else 0,
         "proctor_events": proctor_data
     }

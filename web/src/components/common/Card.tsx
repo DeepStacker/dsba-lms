@@ -1,72 +1,68 @@
 import React from 'react';
+import clsx from 'clsx';
 
 interface CardProps {
   children: React.ReactNode;
-  title?: string;
-  subtitle?: string;
   className?: string;
   padding?: 'none' | 'sm' | 'md' | 'lg';
-}
-
-interface CardHeaderProps {
-  title?: string;
-  subtitle?: string;
-  children?: React.ReactNode;
-}
-
-interface CardContentProps {
-  children: React.ReactNode;
-}
-
-interface CardFooterProps {
-  children: React.ReactNode;
+  shadow?: 'none' | 'sm' | 'md' | 'lg';
+  hover?: boolean;
+  onClick?: () => void;
+  header?: React.ReactNode;
+  footer?: React.ReactNode;
 }
 
 export const Card: React.FC<CardProps> = ({
   children,
-  title,
-  subtitle,
   className = '',
   padding = 'md',
+  shadow = 'sm',
+  hover = false,
+  onClick,
+  header,
+  footer
 }) => {
-  const paddingStyles = {
+  const paddingClasses = {
     none: '',
-    sm: 'p-4',
+    sm: 'p-3',
     md: 'p-6',
     lg: 'p-8'
   };
 
-  return (
-    <div className={`bg-white shadow-sm border border-gray-200 rounded-lg ${className}`}>
-      {title && (
-        <div className={`border-b border-gray-200 ${paddingStyles[padding] || 'p-6'}`}>
-          <h3 className="text-lg font-medium text-gray-900">{title}</h3>
-          {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
+  const shadowClasses = {
+    none: '',
+    sm: 'shadow-sm',
+    md: 'shadow-md',
+    lg: 'shadow-lg'
+  };
+
+  const baseClasses = clsx(
+    'bg-white rounded-lg border border-gray-200 overflow-hidden',
+    shadowClasses[shadow],
+    hover && 'hover:shadow-md transition-shadow duration-200',
+    onClick && 'cursor-pointer',
+    className
+  );
+
+  const content = (
+    <div className={baseClasses} onClick={onClick}>
+      {header && (
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+          {header}
         </div>
       )}
-      <div className={paddingStyles[padding]}>
+      
+      <div className={paddingClasses[padding]}>
         {children}
       </div>
+      
+      {footer && (
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+          {footer}
+        </div>
+      )}
     </div>
   );
+
+  return content;
 };
-
-export const CardHeader: React.FC<CardHeaderProps> = ({
-  title,
-  subtitle,
-  children
-}) => (
-  <div className="px-6 py-4 border-b border-gray-200">
-    {title && <h3 className="text-lg font-medium text-gray-900">{title}</h3>}
-    {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
-    {children}
-  </div>
-);
-
-export const CardContent: React.FC<CardContentProps> = ({ children }) => (
-  <div className="px-6 py-4">{children}</div>
-);
-
-export const CardFooter: React.FC<CardFooterProps> = ({ children }) => (
-  <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">{children}</div>
-);

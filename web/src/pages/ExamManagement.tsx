@@ -4,152 +4,173 @@ import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { DataTable } from '../components/common/DataTable';
 import { SearchFilter } from '../components/common/SearchFilter';
-import { Modal, ConfirmDialog } from '../components/common/Modal';
-import { Select } from '../components/common/Select';
+import { Modal } from '../components/common/Modal';
 import { Input } from '../components/common/Input';
+import { Select } from '../components/common/Select';
 import { Textarea } from '../components/common/Textarea';
-import { DatePicker } from '../components/common/DatePicker';
-import { examsApi, questionsApi } from '../utils/api';
+import { ExamMonitorCard } from '../components/exam/ExamMonitorCard';
+import { examsApi } from '../utils/api';
 import {
   PlusIcon,
-  PencilIcon,
-  TrashIcon,
-  EyeIcon,
   PlayIcon,
   StopIcon,
-  DocumentCheckIcon,
+  EyeIcon,
+  PencilIcon,
+  TrashIcon,
   ClockIcon,
-  UsersIcon,
-  ClipboardDocumentCheckIcon
+  DocumentCheckIcon
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 
 interface Exam {
   id: string;
   title: string;
-  courseId: string;
-  courseName: string;
-  description: string;
-  duration: number; // in minutes
-  totalQuestions: number;
-  totalMarks: number;
-  status: 'draft' | 'published' | 'ongoing' | 'completed' | 'cancelled';
-  scheduledAt: string;
-  endsAt?: string;
-  instructions: string;
-  createdBy: string;
+  course: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  status: 'draft' | 'published' | 'active' | 'ended';
+  totalStudents: number;
+  joinedStudents: number;
+  submittedStudents: number;
   createdAt: string;
-  questionCount: number;
-  attemptCount: number;
-}
-
-interface Question {
-  id: number;
-  text: string;
-  type: 'mcq' | 'descriptive' | 'code';
-  marks: number;
-  difficulty: 'easy' | 'medium' | 'hard';
 }
 
 const ExamManagement: React.FC = () => {
   const { user } = useAuth();
   const [exams, setExams] = useState<Exam[]>([]);
-  const [availableQuestions, setAvailableQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(false);
   const [showExamModal, setShowExamModal] = useState(false);
-  const [showQuestionsModal, setShowQuestionsModal] = useState(false);
-  const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
-  const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
-  const [selectedQuestions, setSelectedQuestions] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
+  const [currentExams, setCurrentExams] = useState<Exam[]>([]);
+  const [activeTab, setActiveTab] = useState<'list' | 'monitor'>('list');
 
   const [examFormData, setExamFormData] = useState({
     title: '',
     courseId: '',
-    courseName: '',
-    description: '',
-    duration: 120,
-    scheduledAt: new Date(),
+    startTime: '',
+    endTime: '',
+    duration: 60,
     instructions: '',
-    totalQuestions: 50,
-    totalMarks: 100
+    settings: {
+      maxAttempts: 1,
+      showResultsImmediately: false,
+      allowReview: true,
+      randomizeQuestions: false,
+      timeLimitEnforced: true,
+      proctoringEnabled: false
+    }
   });
+
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchExams();
-    if (user?.role === 'teacher') {
-      fetchAvailableQuestions();
+  }, []);
+
+  useEffect(() => {
+    let filteredExams = [...exams];
+
+    if (searchQuery.trim()) {
+      filteredExams = filteredExams.filter(exam =>
+        exam.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        exam.course.toLowerCase().includes(searchQuery.toLowerCase())
+      );
     }
-  }, [user]);
+
+    Object.entries(activeFilters).forEach(([key, value]) => {
+      if (value && value !== '') {
+        filteredExams = filteredExams.filter(exam => {
+          if (key === 'status') {
+            return exam.status === value;
+          } else if (key === 'course') {
+            return exam.course.toLowerCase().includes(value.toLowerCase());
+          }
+          return true;
+        });
+      }
+    });
+
+    setCurrentExams(filteredExams);
+  }, [exams, searchQuery, activeFilters]);
 
   const fetchExams = async () => {
     try {
       setLoading(true);
-      const response = await examsApi.getExams();
-      if (response) {
-        setExams(response.map((exam: any) => ({
-          id: String(exam.id),
-          title: exam.title,
-          courseId: exam.course_id,
-          courseName: exam.course_name || 'Unknown Course',
-          description: exam.description,
-          duration: exam.duration_minutes,
-          totalQuestions: exam.total_questions,
-          totalMarks: exam.total_marks,
-          status: exam.status,
-          scheduledAt: exam.scheduled_at,
-          endsAt: exam.ends_at,
-          instructions: exam.instructions,
-          createdBy: exam.created_by,
-          createdAt: exam.created_at,
-          questionCount: exam.questions?.length || 0,
-          attemptCount: exam.attempts_count || 0
-        })));
-      }
+      // Mock data for demonstration
+      const mockExams: Exam[] = [
+        {
+          id: '1',
+          title: 'CS101 Midterm Examination',
+          course: 'Data Structures and Algorithms',
+          startTime: '2024-01-16T10:00:00Z',
+          endTime: '2024-01-16T12:00:00Z',
+          duration: 120,
+          status: 'published',
+          totalStudents: 45,
+          joinedStudents: 42,
+          submittedStudents: 38,
+          createdAt: '2024-01-10T00:00:00Z'
+        },
+        {
+          id: '2',
+          title: 'Database Systems Quiz',
+          course: 'Database Management Systems',
+          startTime: '2024-01-17T14:00:00Z',
+          endTime: '2024-01-17T15:00:00Z',
+          duration: 60,
+          status: 'active',
+          totalStudents: 38,
+          joinedStudents: 35,
+          submittedStudents: 12,
+          createdAt: '2024-01-12T00:00:00Z'
+        },
+        {
+          id: '3',
+          title: 'Web Development Final',
+          course: 'Web Development',
+          startTime: '2024-01-20T09:00:00Z',
+          endTime: '2024-01-20T12:00:00Z',
+          duration: 180,
+          status: 'draft',
+          totalStudents: 32,
+          joinedStudents: 0,
+          submittedStudents: 0,
+          createdAt: '2024-01-15T00:00:00Z'
+        }
+      ];
+      setExams(mockExams);
     } catch (error) {
       toast.error('Failed to fetch exams');
+      console.error('Error fetching exams:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchAvailableQuestions = async () => {
-    try {
-      const response = await questionsApi.getQuestions({ limit: 200 });
-      if (response) {
-        setAvailableQuestions(response);
-      }
-    } catch (error) {
-      toast.error('Failed to fetch questions');
-    }
-  };
-
   const validateExamForm = () => {
     const errors: Record<string, string> = {};
-    if (!examFormData.title.trim()) errors.title = 'Exam title is required';
-    if (!examFormData.courseId) errors.courseId = 'Course is required';
-    if (examFormData.duration <= 0) errors.duration = 'Duration must be greater than 0';
-    if (examFormData.totalQuestions <= 0) errors.totalQuestions = 'Number of questions must be greater than 0';
-    if (examFormData.totalMarks <= 0) errors.totalMarks = 'Total marks must be greater than 0';
+
+    if (!examFormData.title.trim()) {
+      errors.title = 'Exam title is required';
+    }
+    if (!examFormData.courseId) {
+      errors.courseId = 'Course selection is required';
+    }
+    if (!examFormData.startTime) {
+      errors.startTime = 'Start time is required';
+    }
+    if (!examFormData.endTime) {
+      errors.endTime = 'End time is required';
+    }
+    if (examFormData.duration <= 0) {
+      errors.duration = 'Duration must be greater than 0';
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  };
-
-  const resetExamForm = () => {
-    setExamFormData({
-      title: '',
-      courseId: '',
-      courseName: '',
-      description: '',
-      duration: 120,
-      scheduledAt: new Date(),
-      instructions: '',
-      totalQuestions: 50,
-      totalMarks: 100
-    });
-    setFormErrors({});
-    setEditingExam(null);
   };
 
   const handleCreateExam = async () => {
@@ -157,168 +178,176 @@ const ExamManagement: React.FC = () => {
 
     try {
       setLoading(true);
-      const newExamData = {
+      // Mock exam creation
+      const newExam: Exam = {
+        id: String(Date.now()),
         title: examFormData.title,
-        course_id: examFormData.courseId,
-        description: examFormData.description,
-        duration_minutes: examFormData.duration,
-        total_questions: examFormData.totalQuestions,
-        total_marks: examFormData.totalMarks,
-        scheduled_at: examFormData.scheduledAt.toISOString(),
-        instructions: examFormData.instructions
+        course: 'Selected Course', // Would be resolved from courseId
+        startTime: examFormData.startTime,
+        endTime: examFormData.endTime,
+        duration: examFormData.duration,
+        status: 'draft',
+        totalStudents: 0,
+        joinedStudents: 0,
+        submittedStudents: 0,
+        createdAt: new Date().toISOString()
       };
 
-      await examsApi.createExam(newExamData);
+      setExams(prev => [newExam, ...prev]);
       toast.success('Exam created successfully!');
       setShowExamModal(false);
       resetExamForm();
-      fetchExams();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error creating exam:', error);
       toast.error('Failed to create exam');
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePublishExam = async () => {
-    if (!selectedExam) return;
-
+  const handleStartExam = async (examId: string) => {
     try {
       setLoading(true);
-      await examsApi.publishExam(parseInt(selectedExam.id));
-      toast.success('Exam published successfully!');
-      setShowPublishDialog(false);
-      setSelectedExam(null);
-      fetchExams();
+      // Mock start exam
+      setExams(prev => prev.map(exam => 
+        exam.id === examId ? { ...exam, status: 'active' as const } : exam
+      ));
+      toast.success('Exam started successfully!');
     } catch (error) {
-      toast.error('Failed to publish exam');
+      toast.error('Failed to start exam');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddQuestionsToExam = async () => {
-    if (!selectedExam || selectedQuestions.length === 0) return;
-
+  const handleEndExam = async (examId: string) => {
     try {
       setLoading(true);
-      const questionsData = { question_ids: selectedQuestions.map(id => parseInt(id)) };
-      await examsApi.addQuestionsToExam(parseInt(selectedExam.id), questionsData);
-      toast.success('Questions added to exam successfully!');
-      setShowQuestionsModal(false);
-      setSelectedQuestions([]);
-      fetchExams();
+      // Mock end exam
+      setExams(prev => prev.map(exam => 
+        exam.id === examId ? { ...exam, status: 'ended' as const } : exam
+      ));
+      toast.success('Exam ended successfully!');
     } catch (error) {
-      toast.error('Failed to add questions to exam');
+      toast.error('Failed to end exam');
     } finally {
       setLoading(false);
     }
   };
 
-  const columns = [
+  const resetExamForm = () => {
+    setExamFormData({
+      title: '',
+      courseId: '',
+      startTime: '',
+      endTime: '',
+      duration: 60,
+      instructions: '',
+      settings: {
+        maxAttempts: 1,
+        showResultsImmediately: false,
+        allowReview: true,
+        randomizeQuestions: false,
+        timeLimitEnforced: true,
+        proctoringEnabled: false
+      }
+    });
+    setFormErrors({});
+    setEditingExam(null);
+  };
+
+  const getStatusBadge = (status: Exam['status']) => {
+    const statusConfig = {
+      draft: 'bg-gray-100 text-gray-800',
+      published: 'bg-blue-100 text-blue-800',
+      active: 'bg-green-100 text-green-800',
+      ended: 'bg-red-100 text-red-800'
+    };
+
+    return (
+      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusConfig[status]}`}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    );
+  };
+
+  const examColumns = [
     {
       key: 'title',
       header: 'Exam Title',
-      sortable: true
-    },
-    {
-      key: 'courseName',
-      header: 'Course',
-      sortable: true
-    },
-    {
-      key: 'totalQuestions',
-      header: 'Questions',
-      render: (value: number) => (
-        <div className="flex items-center gap-1">
-          <DocumentCheckIcon className="h-4 w-4 text-gray-400" />
-          <span>{value}</span>
+      render: (value: string, exam: Exam) => (
+        <div>
+          <div className="font-medium text-gray-900">{value}</div>
+          <div className="text-sm text-gray-500">{exam.course}</div>
         </div>
-      )
-    },
-    {
-      key: 'duration',
-      header: 'Duration',
-      render: (value: number) => (
-        <div className="flex items-center gap-1">
-          <ClockIcon className="h-4 w-4 text-gray-400" />
-          <span>{value} min</span>
-        </div>
-      )
-    },
-    {
-      key: 'scheduledAt',
-      header: 'Scheduled',
-      render: (value: string) => new Date(value).toLocaleString(),
+      ),
       sortable: true
     },
     {
       key: 'status',
       header: 'Status',
-      render: (value: string) => (
-        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-          value === 'published' ? 'bg-green-100 text-green-800' :
-          value === 'ongoing' ? 'bg-blue-100 text-blue-800' :
-          value === 'completed' ? 'bg-purple-100 text-purple-800' :
-          value === 'cancelled' ? 'bg-red-100 text-red-800' :
-          'bg-gray-100 text-gray-800'
-        }`}>
-          {value.charAt(0).toUpperCase() + value.slice(1)}
-        </span>
-      )
+      render: (value: string) => getStatusBadge(value as Exam['status']),
+      filterable: true
     },
     {
-      key: 'attemptCount',
-      header: 'Attempts',
-      render: (value: number) => (
-        <div className="flex items-center gap-1">
-          <UsersIcon className="h-4 w-4 text-gray-400" />
-          <span>{value}</span>
+      key: 'startTime',
+      header: 'Start Time',
+      render: (value: string) => new Date(value).toLocaleString(),
+      sortable: true
+    },
+    {
+      key: 'duration',
+      header: 'Duration',
+      render: (value: number) => `${value} min`,
+      sortable: true
+    },
+    {
+      key: 'totalStudents',
+      header: 'Students',
+      render: (value: number, exam: Exam) => (
+        <div className="text-center">
+          <div className="text-sm font-medium">{exam.joinedStudents}/{value}</div>
+          <div className="text-xs text-gray-500">joined</div>
         </div>
-      )
+      ),
+      sortable: true
     },
     {
       key: 'actions',
       header: 'Actions',
       render: (value: any, exam: Exam) => (
         <div className="flex items-center gap-2">
-          {(exam.status === 'draft' && user?.role !== 'student') && (
-            <>
-              <button
-                onClick={() => {
-                  setSelectedExam(exam);
-                  setShowQuestionsModal(true);
-                }}
-                className="text-blue-600 hover:text-blue-900 p-1"
-                title="Add Questions"
-              >
-                <PlusIcon className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedExam(exam);
-                  setShowPublishDialog(true);
-                }}
-                className="text-green-600 hover:text-green-900 p-1"
-                title="Publish Exam"
-              >
-                <PlayIcon className="h-4 w-4" />
-              </button>
-            </>
+          {exam.status === 'draft' && (
+            <button
+              onClick={() => handleStartExam(exam.id)}
+              className="text-green-600 hover:text-green-900 p-1"
+              title="Start Exam"
+            >
+              <PlayIcon className="h-4 w-4" />
+            </button>
+          )}
+          {exam.status === 'active' && (
+            <button
+              onClick={() => handleEndExam(exam.id)}
+              className="text-red-600 hover:text-red-900 p-1"
+              title="End Exam"
+            >
+              <StopIcon className="h-4 w-4" />
+            </button>
           )}
           <button
-            onClick={() => {/* View exam details */}}
-            className="text-indigo-600 hover:text-indigo-900 p-1"
+            onClick={() => {}}
+            className="text-blue-600 hover:text-blue-900 p-1"
             title="View Details"
           >
             <EyeIcon className="h-4 w-4" />
           </button>
           <button
-            onClick={() => {/* Delete exam */}}
-            className="text-red-600 hover:text-red-900 p-1"
-            title="Delete"
+            onClick={() => {}}
+            className="text-yellow-600 hover:text-yellow-900 p-1"
+            title="Edit"
           >
-            <TrashIcon className="h-4 w-4" />
+            <PencilIcon className="h-4 w-4" />
           </button>
         </div>
       )
@@ -326,20 +355,27 @@ const ExamManagement: React.FC = () => {
   ];
 
   const filterOptions = [
-    { key: 'status', label: 'Status', type: 'select' as const, options: [
-      { value: 'draft', label: 'Draft' },
-      { value: 'published', label: 'Published' },
-      { value: 'ongoing', label: 'Ongoing' },
-      { value: 'completed', label: 'Completed' }
-    ]},
-    { key: 'courseName', label: 'Course', type: 'text' as const }
+    { 
+      key: 'status', 
+      label: 'Status', 
+      type: 'select' as const, 
+      options: [
+        { value: 'draft', label: 'Draft' },
+        { value: 'published', label: 'Published' },
+        { value: 'active', label: 'Active' },
+        { value: 'ended', label: 'Ended' }
+      ]
+    },
+    { key: 'course', label: 'Course', type: 'text' as const }
   ];
+
+  const activeExams = exams.filter(exam => exam.status === 'active');
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Exam Management</h1>
-        {(user?.role === 'admin' || user?.role === 'teacher') && (
+        <div className="flex gap-3">
           <Button
             variant="primary"
             onClick={() => {
@@ -351,54 +387,143 @@ const ExamManagement: React.FC = () => {
             <PlusIcon className="h-5 w-5" />
             Create Exam
           </Button>
-        )}
+        </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-4">
-          <div className="text-2xl font-bold text-gray-900">{exams.length}</div>
-          <p className="text-sm text-gray-600">Total Exams</p>
+          <div className="flex items-center">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <DocumentCheckIcon className="h-8 w-8 text-blue-600" />
+            </div>
+            <div className="ml-4">
+              <h3 className="text-sm font-medium text-gray-500">Total Exams</h3>
+              <p className="text-2xl font-bold text-gray-900">{exams.length}</p>
+            </div>
+          </div>
         </Card>
         <Card className="p-4">
-          <div className="text-2xl font-bold text-green-900">
-            {exams.filter(e => e.status === 'published').length}
+          <div className="flex items-center">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <PlayIcon className="h-8 w-8 text-green-600" />
+            </div>
+            <div className="ml-4">
+              <h3 className="text-sm font-medium text-gray-500">Active Exams</h3>
+              <p className="text-2xl font-bold text-gray-900">
+                {exams.filter(e => e.status === 'active').length}
+              </p>
+            </div>
           </div>
-          <p className="text-sm text-gray-600">Published</p>
         </Card>
         <Card className="p-4">
-          <div className="text-2xl font-bold text-blue-900">
-            {exams.filter(e => e.status === 'ongoing').length}
+          <div className="flex items-center">
+            <div className="p-2 bg-yellow-100 rounded-lg">
+              <ClockIcon className="h-8 w-8 text-yellow-600" />
+            </div>
+            <div className="ml-4">
+              <h3 className="text-sm font-medium text-gray-500">Scheduled</h3>
+              <p className="text-2xl font-bold text-gray-900">
+                {exams.filter(e => e.status === 'published').length}
+              </p>
+            </div>
           </div>
-          <p className="text-sm text-gray-600">Ongoing</p>
         </Card>
         <Card className="p-4">
-          <div className="text-2xl font-bold text-purple-900">
-            {exams.reduce((acc, e) => acc + e.attemptCount, 0)}
+          <div className="flex items-center">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <span className="text-2xl">👥</span>
+            </div>
+            <div className="ml-4">
+              <h3 className="text-sm font-medium text-gray-500">Total Participants</h3>
+              <p className="text-2xl font-bold text-gray-900">
+                {exams.reduce((acc, exam) => acc + exam.totalStudents, 0)}
+              </p>
+            </div>
           </div>
-          <p className="text-sm text-gray-600">Total Attempts</p>
         </Card>
       </div>
 
-      {/* Search and Filters */}
-      <SearchFilter
-        onSearch={(query) => console.log('Searching exams:', query)}
-        onFilter={(filters) => console.log('Applied filters:', filters)}
-        filterOptions={filterOptions}
-      />
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('list')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'list'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Exam List
+          </button>
+          <button
+            onClick={() => setActiveTab('monitor')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'monitor'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Live Monitor ({activeExams.length})
+          </button>
+        </nav>
+      </div>
 
-      {/* Exams Table */}
-      <Card className="p-6">
-        <DataTable
-          data={exams}
-          columns={columns}
-          loading={loading}
-          itemsPerPage={10}
-          emptyMessage="No exams found"
-        />
-      </Card>
+      {/* Content */}
+      {activeTab === 'list' ? (
+        <>
+          <SearchFilter
+            onSearch={setSearchQuery}
+            onFilter={setActiveFilters}
+            filterOptions={filterOptions}
+            placeholder="Search exams..."
+            className="mb-4"
+          />
 
-      {/* Create Exam Modal */}
+          <Card className="p-6">
+            <DataTable
+              data={currentExams}
+              columns={examColumns}
+              loading={loading}
+              itemsPerPage={10}
+              emptyMessage="No exams found"
+            />
+          </Card>
+        </>
+      ) : (
+        <div className="space-y-6">
+          {activeExams.length === 0 ? (
+            <Card className="p-8 text-center">
+              <ClockIcon className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No Active Exams</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Start an exam to monitor it in real-time.
+              </p>
+            </Card>
+          ) : (
+            activeExams.map((exam) => (
+              <ExamMonitorCard
+                key={exam.id}
+                examTitle={exam.title}
+                stats={{
+                  totalStudents: exam.totalStudents,
+                  joined: exam.joinedStudents,
+                  active: exam.joinedStudents - exam.submittedStudents,
+                  submitted: exam.submittedStudents,
+                  flagged: 2 // Mock data
+                }}
+                timeRemaining="45:32" // Mock data
+                status="active"
+                onEndExam={() => handleEndExam(exam.id)}
+                onViewDetails={() => {}}
+              />
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Create/Edit Exam Modal */}
       <Modal
         isOpen={showExamModal}
         onClose={() => {
@@ -415,89 +540,62 @@ const ExamManagement: React.FC = () => {
           }}
           className="space-y-4"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Exam Title"
-              value={examFormData.title}
-              onChange={(e) => setExamFormData(prev => ({ ...prev, title: e.target.value }))}
-              error={formErrors.title}
-              required
-            />
-
-            <Select
-              label="Course"
-              options={[]} // Would be populated from available courses
-              value={examFormData.courseId}
-              onChange={(value) => setExamFormData(prev => ({ ...prev, courseId: String(value || '') }))}
-              placeholder="Select a course"
-            />
-          </div>
-
-          <Textarea
-            label="Description"
-            value={examFormData.description}
-            onChange={(e) => setExamFormData(prev => ({ ...prev, description: e.target.value }))}
-            rows={3}
+          <Input
+            label="Exam Title"
+            value={examFormData.title}
+            onChange={(e) => setExamFormData(prev => ({ ...prev, title: e.target.value }))}
+            error={formErrors.title}
+            required
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Duration (minutes)</label>
-              <input
-                type="number"
-                value={examFormData.duration}
-                onChange={(e) => setExamFormData(prev => ({
-                  ...prev,
-                  duration: parseInt(e.target.value) || 0
-                }))}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                required
-              />
-            </div>
+          <Select
+            label="Course"
+            value={examFormData.courseId}
+            onChange={(value) => setExamFormData(prev => ({ ...prev, courseId: value }))}
+            options={[
+              { value: '1', label: 'Data Structures and Algorithms' },
+              { value: '2', label: 'Database Management Systems' },
+              { value: '3', label: 'Web Development' }
+            ]}
+            error={formErrors.courseId}
+            required
+          />
 
+          <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Total Questions"
-              type="number"
-              value={examFormData.totalQuestions.toString()}
-              onChange={(e) => setExamFormData(prev => ({
-                ...prev,
-                totalQuestions: parseInt(e.target.value) || 0
-              }))}
-              required
-            />
-
-            <Input
-              label="Total Marks"
-              type="number"
-              value={examFormData.totalMarks.toString()}
-              onChange={(e) => setExamFormData(prev => ({
-                ...prev,
-                totalMarks: parseInt(e.target.value) || 0
-              }))}
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Scheduled Date & Time</label>
-            <input
+              label="Start Time"
               type="datetime-local"
-              value={examFormData.scheduledAt.toISOString().slice(0, 16)}
-              onChange={(e) => setExamFormData(prev => ({
-                ...prev,
-                scheduledAt: new Date(e.target.value)
-              }))}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              value={examFormData.startTime}
+              onChange={(e) => setExamFormData(prev => ({ ...prev, startTime: e.target.value }))}
+              error={formErrors.startTime}
+              required
+            />
+
+            <Input
+              label="End Time"
+              type="datetime-local"
+              value={examFormData.endTime}
+              onChange={(e) => setExamFormData(prev => ({ ...prev, endTime: e.target.value }))}
+              error={formErrors.endTime}
               required
             />
           </div>
+
+          <Input
+            label="Duration (minutes)"
+            type="number"
+            value={String(examFormData.duration)}
+            onChange={(e) => setExamFormData(prev => ({ ...prev, duration: parseInt(e.target.value) }))}
+            error={formErrors.duration}
+            required
+          />
 
           <Textarea
             label="Instructions"
             value={examFormData.instructions}
             onChange={(e) => setExamFormData(prev => ({ ...prev, instructions: e.target.value }))}
-            rows={4}
             placeholder="Enter exam instructions for students..."
+            rows={3}
           />
 
           <div className="flex justify-end gap-3 pt-4">
@@ -521,90 +619,6 @@ const ExamManagement: React.FC = () => {
           </div>
         </form>
       </Modal>
-
-      {/* Add Questions Modal */}
-      <Modal
-        isOpen={showQuestionsModal}
-        onClose={() => {
-          setShowQuestionsModal(false);
-          setSelectedQuestions([]);
-        }}
-        title={`Add Questions to ${selectedExam?.title}`}
-        size="xl"
-      >
-        <div className="space-y-4">
-          <div className="border rounded-lg p-4 max-h-96 overflow-y-auto">
-            {availableQuestions.map(question => (
-              <div key={question.id} className="flex items-start space-x-3 p-3 border-b border-gray-200 last:border-b-0">
-                <input
-                  type="checkbox"
-                  checked={selectedQuestions.includes(question.id.toString())}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedQuestions(prev => [...prev, question.id.toString()]);
-                    } else {
-                      setSelectedQuestions(prev => prev.filter(id => id !== question.id.toString()));
-                    }
-                  }}
-                  className="mt-1"
-                />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">{question.text}</p>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="text-xs text-gray-500">{question.type.toUpperCase()}</span>
-                    <span className="text-xs text-gray-500">{question.marks} marks</span>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      question.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
-                      question.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {question.difficulty}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex justify-between items-center pt-4 border-t">
-            <div className="text-sm text-gray-600">
-              {selectedQuestions.length} questions selected
-              {selectedExam && ` (${selectedExam.totalQuestions - selectedExam.questionCount} remaining)`}
-            </div>
-            <div className="flex gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setShowQuestionsModal(false);
-                  setSelectedQuestions([]);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleAddQuestionsToExam}
-                isLoading={loading}
-                disabled={selectedQuestions.length === 0}
-              >
-                Add Questions
-              </Button>
-            </div>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Publish Exam Confirmation */}
-      <ConfirmDialog
-        isOpen={showPublishDialog}
-        onClose={() => setShowPublishDialog(false)}
-        onConfirm={handlePublishExam}
-        title="Publish Exam"
-        message={`Are you sure you want to publish "${selectedExam?.title}"? Once published, students will be able to see and attempt the exam.`}
-        confirmText="Publish Exam"
-        confirmVariant="primary"
-        loading={loading}
-      />
     </div>
   );
 };

@@ -1,63 +1,58 @@
-import React, { forwardRef } from 'react';
-import { ExclamationCircleIcon } from '@heroicons/react/24/outline';
+import React from 'react';
+import { Field, Label, Textarea as HeadlessTextarea, Description } from '@headlessui/react';
 
-interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+interface TextareaProps {
   label?: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  placeholder?: string;
+  required?: boolean;
+  disabled?: boolean;
   error?: string;
-  helperText?: string;
-  resize?: 'none' | 'vertical' | 'horizontal' | 'both';
+  description?: string;
+  rows?: number;
+  className?: string;
 }
 
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(({
+export const Textarea: React.FC<TextareaProps> = ({
   label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  disabled = false,
   error,
-  helperText,
-  resize = 'vertical',
-  className = '',
+  description,
   rows = 4,
-  ...props
-}, ref) => {
-  const resizeStyles = {
-    none: 'resize-none',
-    vertical: 'resize-y',
-    horizontal: 'resize-x',
-    both: 'resize',
-  };
-
+  className = '',
+}) => {
   return (
-    <div className="space-y-1">
+    <Field className={className}>
       {label && (
-        <label className="block text-sm font-medium text-gray-700">
+        <Label className="block text-sm font-medium text-gray-700 mb-1">
           {label}
-        </label>
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </Label>
       )}
-
-      <div className="relative">
-        <textarea
-          ref={ref}
-          rows={rows}
-          className={`block w-full rounded-md border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 sm:text-sm ${
-            resizeStyles[resize]
-          } ${
-            error
-              ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-red-500'
-              : 'border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500'
-          } ${className}`}
-          {...props}
-        />
-
-        {error && (
-          <div className="absolute inset-y-0 right-0 flex items-start pt-2 pr-3">
-            <ExclamationCircleIcon className="h-5 w-5 text-red-500" />
-          </div>
-        )}
-      </div>
-
-      {(error || helperText) && (
-        <p className={`text-sm ${error ? 'text-red-600' : 'text-gray-500'}`}>
-          {error || helperText}
-        </p>
+      <HeadlessTextarea
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        required={required}
+        disabled={disabled}
+        rows={rows}
+        className={`block w-full rounded-md shadow-sm focus:ring-2 focus:ring-offset-2 disabled:bg-gray-50 disabled:text-gray-500 ${
+          error
+            ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+            : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
+        }`}
+      />
+      {description && !error && (
+        <Description className="mt-1 text-sm text-gray-500">{description}</Description>
       )}
-    </div>
+      {error && (
+        <Description className="mt-1 text-sm text-red-600">{error}</Description>
+      )}
+    </Field>
   );
-});
+};

@@ -15,6 +15,9 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = "redis://redis:6379"
+    # Celery
+    celery_broker_url: str = "amqp://admin:admin123@rabbitmq:5672//"
+    celery_result_backend: str = "rpc://admin:admin123@rabbitmq:5672//"
 
     # JWT
     jwt_secret: str = "your-super-secret-jwt-key-change-this-in-production"
@@ -48,7 +51,7 @@ class Settings(BaseSettings):
     allowed_hosts: List[str] = ["*"]
 
     # Sentry (optional)
-    sentry_dsn: Optional[str] = None
+    sentry_dsn: Optional[str] = None 
 
     class Config:
         env_file = ".env"

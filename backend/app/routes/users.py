@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import text
 from typing import List, Optional
 from ..core.database import get_db
 from ..core.dependencies import get_current_user, require_permission
@@ -29,7 +30,7 @@ async def create_user(
 
     # Check if user already exists
     existing_user = await db.execute(
-        "SELECT id FROM users WHERE email = $1", (user_data.email,)
+        text("SELECT id FROM users WHERE email = $1"), (user_data.email,)
     )
     if existing_user.fetchone():
         raise HTTPException(
@@ -44,11 +45,11 @@ async def create_user(
     user_dict["hashed_password"] = password_hash
     user_dict["created_by"] = current_user.id
 
-    result = await db.execute("""
-        INSERT INTO users (email, name, role, hashed_password, is_active, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, email, name, role, is_active, created_at
-    """, (
+    result = await db.execute(text("""
+        INSERT INTO users (username, email, name, role, department, hashed_password, is_active, first_login, mfa_enabled, phone, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING id, username, email, name, role, is_active, first_login, department, phone, mfa_enabled, created_at, last_login
+    """), (
         user_dict["email"],
         user_dict["name"],
         user_dict["role"],
@@ -106,6 +107,54 @@ async def list_users(
 async def get_current_user_profile(current_user: User = Depends(get_current_user)):
     """Get current user profile"""
     return UserResponse(**current_user.__dict__)
+@router.put("/{user_id}", response_model=UserResponse, summary="Update user by ID", tags=["Users"])
+async def update_user(
+    user_id: int,
+    user_data: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("manage_users"))
+):
+    """Update user by ID (Admin only)"""
+    # Ensure admin role check
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can update users"
+        )
+    
+    user_to_update_result = await db.execute(select(User).where(User.id == user_id))
+    user_to_update = user_to_update_result.scalar_one_or_none()
+
+    if not user_to_update:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    update_dict = user_data.model_dump(exclude_unset=True) # Use model_dump to get dict of set fields
+
+    if not update_dict:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+
+    for field, value in update_dict.items():
+        if field == "password":
+            setattr(user_to_update, "hashed_password", get_password_hash(value))
+        elif field == "role":
+            setattr(user_to_update, field, Role(value)) # Convert string role to Enum
+        else:
+            setattr(user_to_update, field, value)
+    
+    user_to_update.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(user_to_update)
+
+    await log_audit_event(
+        db=db,
+        actor_id=current_user.id,
+        entity_type="user",
+        entity_id=user_id,
+        action=AUDIT_ACTIONS["UPDATE_USER"],
+        reason="Admin updated user profile"
+    )
+
+    return UserResponse(**user_to_update.__dict__)
 
 @router.put("/me", response_model=UserResponse, summary="Update current user", tags=["Users"])
 async def update_current_user(
@@ -128,7 +177,7 @@ async def update_current_user(
     result = await db.execute(f"""
         UPDATE users SET {set_fields}, updated_at = CURRENT_TIMESTAMP
         WHERE id = ${len(values)}
-        RETURNING id, email, name, role, is_active, created_at, last_login
+        RETURNING id, username, email, name, role, is_active, first_login, department, phone, mfa_enabled, created_at, last_login, last_login
     """, values)
 
     updated_user = result.fetchone()
@@ -186,6 +235,160 @@ async def delete_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     return Response(message="User deleted successfully")
+@router.put("/{user_id}/suspend", response_model=CommonResponse, summary="Suspend user", tags=["Users"])
+async def suspend_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("suspend_user")) # Assuming a specific permission
+):
+    """Suspend a user (Admin only)"""
+    # Ensure admin role check - though require_permission should handle this
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can suspend users"
+        )
+
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot suspend your own account"
+        )
+    
+    user_to_suspend_result = await db.execute(select(User).where(User.id == user_id))
+    user_to_suspend = user_to_suspend_result.scalar_one_or_none()
+
+    if not user_to_suspend:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if not user_to_suspend.is_active:
+        raise HTTPException(status_code=400, detail="User is already suspended/inactive")
+    
+    user_to_suspend.is_active = False
+    await db.commit()
+
+    await log_audit_event(
+        db=db,
+        actor_id=current_user.id,
+        entity_type="user",
+        entity_id=user_id,
+        action=AUDIT_ACTIONS["SUSPEND_USER"],
+        reason="Admin suspended user account"
+    )
+
+    return CommonResponse(message=f"User {user_id} suspended successfully.")
+@router.put("/{user_id}/suspend", response_model=CommonResponse, summary="Suspend user", tags=["Users"])
+async def suspend_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("suspend_user")) # Assuming a specific permission
+@router.put("/{user_id}/reactivate", response_model=CommonResponse, summary="Reactivate user", tags=["Users"])
+async def reactivate_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("reactivate_user")) # Assuming a specific permission
+):
+    """Reactivate a suspended user (Admin only)"""
+    if current_user.role != "admin": # Redundant check if require_permission is set correctly but good for clarity
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can reactivate users"
+        )
+    
+    user_to_reactivate_result = await db.execute(select(User).where(User.id == user_id))
+    user_to_reactivate = user_to_reactivate_result.scalar_one_or_none()
+
+    if not user_to_reactivate:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user_to_reactivate.is_active:
+        raise HTTPException(status_code=400, detail="User is already active")
+    
+    user_to_reactivate.is_active = True
+    await db.commit()
+
+    await log_audit_event(
+        db=db,
+        actor_id=current_user.id,
+        entity_type="user",
+        entity_id=user_id,
+        action=AUDIT_ACTIONS["REACTIVATE_USER"],
+        reason="Admin reactivated user account"
+    )
+
+    return CommonResponse(message=f"User {user_id} reactivated successfully.")
+@router.put("/{user_id}/reactivate", response_model=CommonResponse, summary="Reactivate user", tags=["Users"])
+async def reactivate_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("reactivate_user")) # Assuming a specific permission
+):
+    """Reactivate a suspended user (Admin only)"""
+    if current_user.role != "admin": # Redundant check if require_permission is set correctly but good for clarity
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can reactivate users"
+        )
+    
+    user_to_reactivate_result = await db.execute(select(User).where(User.id == user_id))
+    user_to_reactivate = user_to_reactivate_result.scalar_one_or_none()
+
+    if not user_to_reactivate:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user_to_reactivate.is_active:
+        raise HTTPException(status_code=400, detail="User is already active")
+    
+    user_to_reactivate.is_active = True
+    await db.commit()
+
+    await log_audit_event(
+        db=db,
+        actor_id=current_user.id,
+        entity_type="user",
+        entity_id=user_id,
+        action=AUDIT_ACTIONS["REACTIVATE_USER"],
+        reason="Admin reactivated user account"
+    )
+
+    return CommonResponse(message=f"User {user_id} reactivated successfully.")
+):
+    """Suspend a user (Admin only)"""
+    # Ensure admin role check - though require_permission should handle this
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can suspend users"
+        )
+
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot suspend your own account"
+        )
+    
+    user_to_suspend_result = await db.execute(select(User).where(User.id == user_id))
+    user_to_suspend = user_to_suspend_result.scalar_one_or_none()
+
+    if not user_to_suspend:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if not user_to_suspend.is_active:
+        raise HTTPException(status_code=400, detail="User is already suspended/inactive")
+    
+    user_to_suspend.is_active = False
+    await db.commit()
+
+    await log_audit_event(
+        db=db,
+        actor_id=current_user.id,
+        entity_type="user",
+        entity_id=user_id,
+        action=AUDIT_ACTIONS["SUSPEND_USER"],
+        reason="Admin suspended user account"
+    )
+
+    return CommonResponse(message=f"User {user_id} suspended successfully.")
 
 # Bulk import/export endpoints - commented out for now due to missing dependencies
 # TODO: Implement bulk operations when all dependencies are available

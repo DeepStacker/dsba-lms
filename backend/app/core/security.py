@@ -38,10 +38,38 @@ def verify_token(token: str) -> Optional[dict]:
 
 # RBAC permissions map
 PERMISSIONS = {
-    "admin": ["*"],
-    "teacher": ["read_exam", "write_exam", "grade", "read_student", "write_question"],
-    "student": ["read_exam", "attempt_exam", "read_result"],
-    "coordinator": ["read_exam", "write_exam", "read_student", "approve"],
+    "admin": [
+        "*", # Full access
+        "manage_users", "manage_roles", "manage_permissions",
+        "manage_programs", "manage_courses", "manage_cos", "manage_pos", "map_co_po",
+        "assign_coordinators", "define_academic_calendar",
+        "view_all_analytics", "view_proctor_logs", "accreditation_reports",
+        "configure_lock_policies", "override_lock",
+        "suspend_user", "reactivate_user", "approve_teacher_proposals",
+        "send_notifications", "publish_circulars", "view_audit_trail"
+    ],
+    "teacher": [
+        "read_course_content", "write_course_content",
+        "define_cos", "map_co_po_propose",
+        "create_questions", "edit_questions", "attach_media_to_questions", "ai_generate_questions",
+        "schedule_exams", "manage_exam_settings", "start_end_exam", "monitor_live_exams",
+        "grade_students", "ai_propose_grades", "override_grades", "bulk_upload_grades", "add_feedback",
+        "view_class_analytics", "view_student_progress", "view_malpractice_flags",
+        "create_lesson_plans", "generate_lesson_content",
+        "edit_rubrics", "peer_grade", "view_slas"
+    ],
+    "student": [
+        "access_course_content", "attempt_exams", "read_result", "get_ai_feedback",
+        "view_personal_analytics", "view_sgpa_cgpa", "view_co_po_attainment_self",
+        "view_proctor_logs_self", "practice_quizzes", "ai_doubt_bot",
+        "submit_assignments", "request_mentorship", "dispute_resolution"
+    ],
+    "coordinator": [
+        "read_course_content", "view_student_progress",
+        "manage_attendance", "send_communications",
+        "view_class_analytics",
+        "approve_co_po_map"
+    ]
 }
 
 def has_permission(role: str, action: str) -> bool:

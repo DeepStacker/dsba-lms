@@ -1,196 +1,182 @@
-import React, { useState, useMemo } from 'react';
-import {
-  ChevronUpDownIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
+import React, { useState } from 'react';
+import { ChevronUpIcon, ChevronDownIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { Button } from './Button';
+import { Input } from './Input';
+import clsx from 'clsx';
 
-interface Column<T> {
-  key: keyof T | string;
-  header: string;
-  render?: (value: any, row: T) => React.ReactNode;
+interface Column<T = any> {
+  key: keyof T;
+  label: string;
   sortable?: boolean;
-  filterable?: boolean;
-  className?: string;
+  render?: (value: any, item: T, index: number) => React.ReactNode;
+  width?: string;
+  align?: 'left' | 'center' | 'right';
 }
 
-interface TableProps<T> {
+interface DataTableProps<T = any> {
   data: T[];
   columns: Column<T>[];
   loading?: boolean;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  sortable?: boolean;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    onPageChange: (page: number) => void;
+    onLimitChange: (limit: number) => void;
+  };
+  onSort?: (key: string, direction: 'asc' | 'desc') => void;
+  onSearch?: (query: string) => void;
   emptyMessage?: string;
-  itemsPerPage?: number;
   className?: string;
+  rowClassName?: (item: T, index: number) => string;
+  onRowClick?: (item: T, index: number) => void;
+  actions?: Array<{
+    label: string;
+    onClick: (item: T) => void;
+    variant?: 'primary' | 'secondary' | 'danger';
+    icon?: React.ComponentType<{ className?: string }>;
+    show?: (item: T) => boolean;
+  }>;
 }
 
-export function DataTable<T>({
+export function DataTable<T = any>({
   data,
   columns,
   loading = false,
+  searchable = false,
+  searchPlaceholder = 'Search...',
+  sortable = true,
+  pagination,
+  onSort,
+  onSearch,
   emptyMessage = 'No data available',
-  itemsPerPage = 10,
   className = '',
-}: TableProps<T>) {
-  const [sortColumn, setSortColumn] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState('');
+  rowClassName,
+  onRowClick,
+  actions
+}: DataTableProps<T>) {
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: 'asc' | 'desc';
+  } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Sort data
-  const sortedData = useMemo(() => {
-    if (!sortColumn) return data;
+  const handleSort = (key: string) => {
+    if (!sortable) return;
 
-    return [...data].sort((a: any, b: any) => {
-      const aValue = a[sortColumn];
-      const bValue = b[sortColumn];
-
-      if (aValue === bValue) return 0;
-
-      const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-  }, [data, sortColumn, sortDirection]);
-
-  // Filter data
-  const filteredData = useMemo(() => {
-    return sortedData.filter((row: any) => {
-      // Search filter
-      if (searchTerm) {
-        const searchableText = columns
-          .map(column => {
-            const value = row[column.key];
-            return column.render ? '' : String(value || '').toLowerCase();
-          })
-          .join(' ');
-
-        if (!searchableText.includes(searchTerm.toLowerCase())) {
-          return false;
-        }
-      }
-
-      // Column filters
-      for (const [columnKey, filterValue] of Object.entries(filterValues)) {
-        if (!filterValue) continue;
-        const value = String(row[columnKey] || '').toLowerCase();
-        if (!value.includes(filterValue.toLowerCase())) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [sortedData, searchTerm, filterValues, columns]);
-
-  // Paginate data
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredData.slice(start, start + itemsPerPage);
-  }, [filteredData, currentPage, itemsPerPage]);
-
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage + 1;
-  const endIndex = Math.min(currentPage * itemsPerPage, filteredData.length);
-
-  const handleSort = (column: Column<T>) => {
-    if (!column.sortable) return;
-
-    const columnKey = String(column.key);
-    if (sortColumn === columnKey) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortColumn(columnKey);
-      setSortDirection('asc');
+    let direction: 'asc' | 'desc' = 'asc';
+    
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
     }
+
+    setSortConfig({ key, direction });
+    onSort?.(key, direction);
   };
 
-  const handleFilter = (column: Column<T>, value: string) => {
-    if (!column.filterable) return;
-
-    const columnKey = String(column.key);
-    setFilterValues(prev => ({
-      ...prev,
-      [columnKey]: value
-    }));
-    setCurrentPage(1); // Reset to first page
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    onSearch?.(query);
   };
 
-  const getSortedIcon = (column: Column<T>) => {
-    if (!column.sortable) return null;
-    const columnKey = String(column.key);
-
-    if (sortColumn === columnKey) {
-      return sortDirection === 'asc'
-        ? <ChevronUpIcon className="h-4 w-4" />
-        : <ChevronDownIcon className="h-4 w-4" />;
+  const getSortIcon = (columnKey: string) => {
+    if (!sortConfig || sortConfig.key !== columnKey) {
+      return null;
     }
-    return <ChevronUpDownIcon className="h-4 w-4 opacity-50" />;
+    
+    return sortConfig.direction === 'asc' 
+      ? <ChevronUpIcon className="h-4 w-4" />
+      : <ChevronDownIcon className="h-4 w-4" />;
   };
 
-  if (loading) {
+  const renderPagination = () => {
+    if (!pagination) return null;
+
+    const { page, limit, total, onPageChange, onLimitChange } = pagination;
+    const totalPages = Math.ceil(total / limit);
+    const startItem = (page - 1) * limit + 1;
+    const endItem = Math.min(page * limit, total);
+
     return (
-      <div className={`animate-pulse ${className}`}>
-        <div className="h-8 bg-gray-200 rounded mb-4"></div>
-        <div className="space-y-3">
-          {Array.from({ length: itemsPerPage }).map((_, i) => (
-            <div key={i} className="h-6 bg-gray-200 rounded"></div>
-          ))}
+      <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-gray-700">Show</span>
+          <select
+            value={limit}
+            onChange={(e) => onLimitChange(Number(e.target.value))}
+            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+          <span className="text-sm text-gray-700">entries</span>
+        </div>
+
+        <div className="text-sm text-gray-700">
+          Showing {startItem} to {endItem} of {total} entries
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1}
+          >
+            Previous
+          </Button>
+          
+          {/* Page numbers */}
+          <div className="flex space-x-1">
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              const pageNum = Math.max(1, Math.min(totalPages - 4, page - 2)) + i;
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => onPageChange(pageNum)}
+                  className={clsx(
+                    'px-3 py-1 text-sm rounded-md',
+                    pageNum === page
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                  )}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+          </div>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages}
+          >
+            Next
+          </Button>
         </div>
       </div>
     );
-  }
+  };
 
   return (
-    <div className={`bg-white ${className}`}>
+    <div className={clsx('bg-white shadow-sm rounded-lg overflow-hidden', className)}>
       {/* Search Bar */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="relative">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+      {searchable && (
+        <div className="px-6 py-4 border-b border-gray-200">
+          <Input
+            placeholder={searchPlaceholder}
+            value={searchQuery}
+            onChange={handleSearch}
+            leftIcon={MagnifyingGlassIcon}
+            className="max-w-sm"
           />
-        </div>
-      </div>
-
-      {/* Filters */}
-      {columns.some(col => col.filterable) && (
-        <div className="p-4 border-b border-gray-200">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {columns
-              .filter(col => col.filterable)
-              .map((column) => (
-                <div key={String(column.key)} className="relative">
-                  <FunnelIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder={`Filter ${column.header}...`}
-                    value={filterValues[String(column.key)] || ''}
-                    onChange={(e) => handleFilter(column, e.target.value)}
-                    className="w-full pl-9 pr-8 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  {filterValues[String(column.key)] && (
-                    <button
-                      onClick={() => handleFilter(column, '')}
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded"
-                    >
-                      <XMarkIcon className="h-4 w-4 text-gray-400" />
-                    </button>
-                  )}
-                </div>
-              ))}
-          </div>
         </div>
       )}
 
@@ -199,114 +185,107 @@ export function DataTable<T>({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {columns.map((column, index) => (
+              {columns.map((column) => (
                 <th
-                  key={index}
-                  className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                    column.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
-                  } ${column.className || ''}`}
-                  onClick={() => handleSort(column)}
+                  key={String(column.key)}
+                  scope="col"
+                  className={clsx(
+                    'px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider',
+                    column.align === 'center' && 'text-center',
+                    column.align === 'right' && 'text-right',
+                    column.sortable && sortable && 'cursor-pointer hover:bg-gray-100',
+                    column.width && `w-${column.width}`
+                  )}
+                  onClick={() => column.sortable && handleSort(String(column.key))}
                 >
-                  <div className="flex items-center">
-                    <span>{column.header}</span>
-                    {getSortedIcon(column)}
+                  <div className="flex items-center space-x-1">
+                    <span>{column.label}</span>
+                    {column.sortable && sortable && getSortIcon(String(column.key))}
                   </div>
                 </th>
               ))}
+              {actions && actions.length > 0 && (
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {paginatedData.map((row, rowIndex) => (
-              <tr key={rowIndex} className="hover:bg-gray-50">
-                {columns.map((column, colIndex) => {
-                  const value = (row as any)[column.key];
-                  return (
-                    <td
-                      key={colIndex}
-                      className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${column.className || ''}`}
-                    >
-                      {column.render ? column.render(value, row) : String(value || '')}
-                    </td>
-                  );
-                })}
+            {loading ? (
+              <tr>
+                <td colSpan={columns.length + (actions ? 1 : 0)} className="px-6 py-12 text-center">
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span className="ml-2 text-gray-500">Loading...</span>
+                  </div>
+                </td>
               </tr>
-            ))}
+            ) : data.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length + (actions ? 1 : 0)} className="px-6 py-12 text-center text-gray-500">
+                  {emptyMessage}
+                </td>
+              </tr>
+            ) : (
+              data.map((item, index) => (
+                <tr
+                  key={index}
+                  className={clsx(
+                    'hover:bg-gray-50 transition-colors duration-150',
+                    onRowClick && 'cursor-pointer',
+                    rowClassName?.(item, index)
+                  )}
+                  onClick={() => onRowClick?.(item, index)}
+                >
+                  {columns.map((column) => (
+                    <td
+                      key={String(column.key)}
+                      className={clsx(
+                        'px-6 py-4 whitespace-nowrap text-sm text-gray-900',
+                        column.align === 'center' && 'text-center',
+                        column.align === 'right' && 'text-right'
+                      )}
+                    >
+                      {column.render 
+                        ? column.render(item[column.key], item, index)
+                        : String(item[column.key] || '')
+                      }
+                    </td>
+                  ))}
+                  {actions && actions.length > 0 && (
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end space-x-2">
+                        {actions
+                          .filter(action => !action.show || action.show(item))
+                          .map((action, actionIndex) => (
+                            <Button
+                              key={actionIndex}
+                              variant={action.variant || 'secondary'}
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                action.onClick(item);
+                              }}
+                              className="flex items-center space-x-1"
+                            >
+                              {action.icon && <action.icon className="h-4 w-4" />}
+                              <span>{action.label}</span>
+                            </Button>
+                          ))
+                        }
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Empty State */}
-      {paginatedData.length === 0 && (
-        <div className="p-8 text-center">
-          <p className="text-gray-500">{emptyMessage}</p>
-        </div>
-      )}
-
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-          <div className="flex-1 flex justify-between sm:hidden">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className="relative inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className="ml-3 relative inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-gray-700">
-                Showing <span className="font-medium">{startIndex}</span> to{' '}
-                <span className="font-medium">{endIndex}</span> of{' '}
-                <span className="font-medium">{filteredData.length}</span> results
-              </p>
-            </div>
-            <div>
-              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                <button
-                  onClick={() => setCurrentPage(1)}
-                  disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  First
-                </button>
-                <button
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  <ArrowLeftIcon className="h-5 w-5" />
-                </button>
-                <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
-                  {currentPage} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                  className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  <ArrowRightIcon className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={() => setCurrentPage(totalPages)}
-                  disabled={currentPage === totalPages}
-                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Last
-                </button>
-              </nav>
-            </div>
-          </div>
-        </div>
-      )}
+      {renderPagination()}
     </div>
   );
 }

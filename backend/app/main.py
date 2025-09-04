@@ -5,7 +5,11 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from .core.database import create_tables
 from .core.config import settings
-from .routes import auth, exams, programs, questions, users, reports, admin, grading
+from .core.startup import lifespan
+from .routes import (
+    auth, exams, programs, questions, users, reports, admin, grading, 
+    lock_windows, internal_marks, notifications, ai_service, websocket_routes
+)
 import sentry_sdk
 
 if settings.sentry_dsn:
@@ -28,6 +32,7 @@ app = FastAPI(
     docs_url=None,
     redoc_url="/docs",
     openapi_url="/openapi.json",
+    lifespan=lifespan
 )
 
 # CORS middleware
@@ -77,14 +82,19 @@ async def health_check():
     return {"status": "healthy", "version": "1.0.0"}
 
 # Include routers
-app.include_router(admin.router, prefix="/api/v1", tags=["Admin"])
-app.include_router(grading.router, prefix="/api/v1", tags=["Grading"])
-app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-app.include_router(users.router, prefix="/users", tags=["Users"])
-app.include_router(programs.router, prefix="/programs", tags=["Programs"])
-app.include_router(exams.router, prefix="/exams", tags=["Examinations"])
-app.include_router(questions.router, prefix="/questions", tags=["Questions"])
-app.include_router(reports.router, prefix="/reports", tags=["Reports"])
+app.include_router(admin, prefix="/api/v1", tags=["Admin"])
+app.include_router(grading, prefix="/api/v1", tags=["Grading"])
+app.include_router(auth, prefix="/auth", tags=["Authentication"])
+app.include_router(users, prefix="/users", tags=["Users"])
+app.include_router(programs, prefix="/programs", tags=["Programs"])
+app.include_router(exams, prefix="/exams", tags=["Examinations"])
+app.include_router(questions, prefix="/questions", tags=["Questions"])
+app.include_router(reports, prefix="/reports", tags=["Reports"])
+app.include_router(lock_windows, prefix="/api/v1", tags=["Lock Windows"])
+app.include_router(internal_marks, prefix="/internal-marks", tags=["Internal Marks"])
+app.include_router(notifications, prefix="/api/v1", tags=["Notifications"])
+app.include_router(ai_service, prefix="/api/v1", tags=["AI Services"])
+app.include_router(websocket_routes, prefix="/api/v1", tags=["WebSocket"])
 
 # Custom docs endpoint
 @app.get("/docs", include_in_schema=False)
